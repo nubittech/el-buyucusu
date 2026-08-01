@@ -57,13 +57,14 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">Prototip v5 · motor bekleniyor…</div>
+  <div class="sub" id="subLine">Prototip v5.1 · motor bekleniyor…</div>
   <div class="rules">
     🎯 <b>Oto-kilit:</b> kamera hep en yakın düşmana kilitli — nişan yok<br>
     🕹️ <b>Sağ başparmak:</b> sağ yarıda sürükle → manevra/strafe<br>
     🧱 <b>Siperler:</b> engellerin arkasına saklan<br>
     👌 <b>Mühür:</b> ateş topu şarjı (3 atış) → 👉 kilitli hedefe fırlar<br>
-    ✋ <b>Mühür:</b> kalkan — enerjisi sınırlı, taşıdığın şarjı bozar
+    ✋ <b>Mühür:</b> kalkan — avuç tam açık, parmaklar ayrık ve kameraya dönük;
+       kısa süre sabit tut. Enerjisi sınırlı, taşıdığın şarjı bozar
   </div>
   <button class="bigbtn" id="startBtn">Başlat</button>
   <div class="note">Başlamak için ekranda herhangi bir yere dokunabilirsin. Kamera izni istenecek; görüntün cihazından çıkmaz, ekranda da gösterilmez. Kamera açılamazsa simülasyon moduna geçilir.</div>
@@ -88,7 +89,7 @@ const pip=document.getElementById('pip'), pctx=pip.getContext('2d');
 const video=document.getElementById('cam');
 const statusEl=document.getElementById('status'), scoreEl=document.getElementById('score');
 const heartsEl=document.getElementById('hearts'), ammoEl=document.getElementById('ammo');
-document.getElementById('subLine').textContent='Prototip v5 · motor hazır ✓';
+document.getElementById('subLine').textContent='Prototip v5.1 · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -339,7 +340,7 @@ function boom(x,y,z,scale,color){ fx.push({x,y,z,t:0,scale,color}); }
    GİRİŞLER — joistik (dokunmatik) + jest durum makinesi
    ============================================================= */
 const S={mode:'idle',ammo:0,AMMO_MAX:3,chargeMs:0,CHARGE_NEED:350,cooldownUntil:0,
-  gunFrames:0,palmMs:0,handSeen:false,lastHandTs:0,
+  gunFrames:0,palmMs:0,PALM_NEED:220,handSeen:false,lastHandTs:0,
   cursor:{x:innerWidth/2,y:innerHeight/2,ok:false},
   aim:{x:innerWidth/2,y:innerHeight/3,ok:false},
   blocking:false,shield:1,shieldLock:false,
@@ -426,11 +427,27 @@ function mapN(v){ return Math.min(1,Math.max(0,(v-0.15)/0.7)); }
 function toScreen(lm){ return {x:mapN(1-lm.x)*W,y:mapN(lm.y)*H}; }
 const d2v=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function analyzeHand(lm){
-  const scale=d2v(lm[0],lm[9])||1e-6;
-  const pinch=d2v(lm[4],lm[8])<scale*0.45;
+  const palmLen=d2v(lm[0],lm[9])||1e-6;
+  const pinch=d2v(lm[4],lm[8])<palmLen*0.45;
   const ext=(tip,pipJ)=>d2v(lm[tip],lm[0])>d2v(lm[pipJ],lm[0])*1.12;
   const i=ext(8,6),m=ext(12,10),r=ext(16,14),p=ext(20,18);
-  return {pinch,gun:i&&m&&!r&&!p&&!pinch,palm:i&&m&&r&&p&&!pinch};
+
+  /* --- kalkan: dört bağımsız şart birden (eşikler sentetik iskeletlerle kalibre edildi) --- */
+  const palmWid=d2v(lm[5],lm[17])||1e-6;              /* boğum hattı: işaret MCP → serçe MCP */
+  /* 1) dört parmak da BELİRGİN açık — gevşek 1.12 değil, 1.18: yarı bükük el elenir */
+  const extS=(tip,pipJ)=>d2v(lm[tip],lm[0])>d2v(lm[pipJ],lm[0])*1.18;
+  const openFour=extS(8,6)&&extS(12,10)&&extS(16,14)&&extS(20,18);
+  /* 2) avuç kameraya dönük mü: boy/en oranı. El yana dönünce (yaw) en kısalır → oran
+        yükselir; öne-arkaya yatınca (pitch) boy kısalır → oran düşer. ~±45°'de kapanır. */
+  const aspect=palmLen/palmWid;
+  const facing=aspect>0.95&&aspect<1.72;
+  /* 3) parmaklar yelpaze gibi ayrık: işaret ve serçe yönleri arası açı > 22° (ölçekten bağımsız) */
+  const ax=lm[8].x-lm[5].x, ay=lm[8].y-lm[5].y, bx=lm[20].x-lm[17].x, by=lm[20].y-lm[17].y;
+  const spread=(ax*bx+ay*by)/((Math.hypot(ax,ay)||1e-6)*(Math.hypot(bx,by)||1e-6))<0.927;
+  /* 4) baş parmak da açık ve avuçtan uzakta */
+  const thumbOut=d2v(lm[4],lm[17])>palmWid*1.25&&d2v(lm[4],lm[5])>palmWid*0.50;
+
+  return {pinch,gun:i&&m&&!r&&!p&&!pinch,palm:openFour&&facing&&spread&&thumbOut&&!pinch};
 }
 let lastVideoTs=-1;
 function readHand(now){
@@ -477,8 +494,12 @@ function drawPip(lm,pose){
    ============================================================= */
 const shieldBarEl=document.getElementById('shieldBar');
 function updateSpell(pose,dtMs,now){
-  /* kalkan mühürü */
-  const wantBlock=pose.palm&&!S.shieldLock;
+  /* kalkan mühürü — zaman kilidi: poz S.PALM_NEED ms boyunca sabit tutulmadan açılmaz.
+     Böylece pinch→silah geçişinde parmakların anlık "açık" görünmesi kalkanı tetiklemez
+     ve taşınan şarjı bozmaz. Bırakınca kademeli düşer → tek karelik kayıpta titremez. */
+  if(pose.palm) S.palmMs=Math.min(S.PALM_NEED+180,S.palmMs+dtMs);
+  else          S.palmMs=Math.max(0,S.palmMs-dtMs*1.6);
+  const wantBlock=S.palmMs>=S.PALM_NEED&&!S.shieldLock;
   S.blocking=wantBlock&&S.shield>0.02;
   if(S.blocking){
     S.shield=Math.max(0,S.shield-dtMs/1300);
@@ -834,7 +855,7 @@ function resetGame(){
   G.score=0;scoreEl.textContent='0';G.hearts=5;heartsDraw();
   enemies.length=0;shots.length=0;fx.length=0;
   P.x=0;P.z=0;P.yaw=0;P.targetYaw=0;camYaw=0;camX=0;camY=4.6;camZ=-8;
-  S.mode='idle';S.ammo=0;S.chargeMs=0;S.shield=1;S.shieldLock=false;S.blocking=false;
+  S.mode='idle';S.ammo=0;S.chargeMs=0;S.palmMs=0;S.shield=1;S.shieldLock=false;S.blocking=false;
   G.over=false;G.running=true;G.spawnT=2.2;G.flash=0;
 }
 function retry(){ if(!G.over||performance.now()-overAt<600) return;
