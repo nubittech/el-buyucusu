@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>El Büyücüsü — Prototip</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;width:100%;overflow:hidden;position:fixed;inset:0;background:#0b0620;
+ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#efeaff;
+ touch-action:none;user-select:none;-webkit-user-select:none}
+#game{position:absolute;inset:0;width:100%;height:100%;display:block}
+#cam{position:absolute;width:2px;height:2px;opacity:0;pointer-events:none}
+#pip{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;width:92px;height:122px;
+ border-radius:12px;border:1px solid rgba(255,255,255,.28);background:#000;z-index:5;display:none;object-fit:cover}
+#hud{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:14px;z-index:5;text-align:right;
+ font-weight:700;text-shadow:0 2px 10px #000;pointer-events:none}
+#hud .score{font-size:24px;color:#ffd166;letter-spacing:1px}
+#hud .hearts{font-size:13px;letter-spacing:2px;margin-top:2px}
+#status{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 142px);
+ z-index:5;background:rgba(12,6,34,.66);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(8px);
+ -webkit-backdrop-filter:blur(8px);padding:8px 16px;border-radius:999px;font-size:13px;white-space:nowrap;
+ pointer-events:none;transition:opacity .25s;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+#simBar{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);left:14px;z-index:6;display:none;gap:10px}
+#simBar button{background:linear-gradient(180deg,#5b2ee0,#3b1a99);color:#fff;border:1px solid rgba(255,255,255,.3);
+ border-radius:14px;padding:14px 16px;font-size:15px;font-weight:700;box-shadow:0 4px 18px rgba(80,40,220,.45)}
+#simBar button:active{transform:scale(.95)}
+.ov{position:absolute;inset:0;z-index:10;background:rgba(7,3,20,.93);display:flex;flex-direction:column;
+ align-items:center;justify-content:center;text-align:center;padding:28px;gap:14px}
+.ov h1{font-size:30px;background:linear-gradient(90deg,#ffb347,#ff5e8a,#a06bff);
+ -webkit-background-clip:text;background-clip:text;color:transparent}
+.ov .sub{color:#b9aee0;font-size:14px;margin-bottom:6px}
+.ov .rules{text-align:left;font-size:14.5px;line-height:2;color:#ddd6f5;background:rgba(255,255,255,.05);
+ border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:14px 18px;max-width:340px}
+.ov .note{font-size:12px;color:#8d81b8;max-width:300px;line-height:1.5}
+.bigbtn{margin-top:6px;background:linear-gradient(180deg,#ff9e3d,#e8552e);color:#fff;border:none;border-radius:16px;
+ padding:16px 46px;font-size:18px;font-weight:800;letter-spacing:.5px;box-shadow:0 6px 24px rgba(255,110,40,.45)}
+.bigbtn:active{transform:scale(.96)}
+#gameOver{display:none}
+#gameOver .final{font-size:44px;color:#ffd166;font-weight:800}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<video id="cam" playsinline muted autoplay></video>
+<canvas id="pip"></canvas>
+<div id="hud"><div class="score" id="score">0</div><div class="hearts" id="hearts"></div></div>
+<div id="status">Yükleniyor…</div>
+<div id="simBar"><button id="btnCharge">👌 Şarj (basılı tut)</button></div>
+
+<div class="ov" id="startOv">
+  <h1>🧙 El Büyücüsü</h1>
+  <div class="sub" id="subLine">Kamera-jest kontrol prototipi · motor bekleniyor…</div>
+  <div class="rules">
+    🕹️ <b>Sağ başparmak:</b> ekranın sağ yarısında sürükle → hareket<br>
+    👌 <b>Sol el:</b> baş + işaret parmağını birleştir → ateş topu şarj<br>
+    👉 <b>Silah pozu</b> (iki parmak): nişan al → otomatik fırlar<br>
+    ✋ <b>Açık avuç:</b> büyüyü iptal eder
+  </div>
+  <button class="bigbtn" id="startBtn">Başlat</button>
+  <div class="note">Başlamak için ekranda herhangi bir yere dokunabilirsin. Kamera izni istenecek; görüntü cihazından çıkmaz. Kamera açılamazsa oyun simülasyon moduna geçer.</div>
+</div>
+
+<div class="ov" id="gameOver">
+  <h1>Büyü Bozuldu</h1>
+  <div class="final" id="finalScore">0</div>
+  <div class="sub">ruh küresi yok edildi</div>
+  <button class="bigbtn" id="retryBtn">Tekrar Dene</button>
+</div>
+
+<script>
+/* ================= temel kurulum ================= */
+const cv = document.getElementById('game'), ctx = cv.getContext('2d');
+const pip = document.getElementById('pip'), pctx = pip.getContext('2d');
+const video = document.getElementById('cam');
+const statusEl = document.getElementById('status');
+/* JS çalışıyor göstergesi — bu satır görünmüyorsa önizleme scriptleri engelliyor demektir */
+document.getElementById('subLine').textContent = 'Kamera-jest kontrol prototipi · motor hazır ✓';
+const scoreEl = document.getElementById('score'), heartsEl = document.getElementById('hearts');
+let W=0,H=0,DPR=Math.min(devicePixelRatio||1,2);
+function resize(){ W=innerWidth; H=innerHeight; cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
+addEventListener('resize',resize); resize();
+pip.width=92*2; pip.height=122*2;
+
+/* ================= oyun durumu ================= */
+const G = {
+  running:false, over:false, score:0, hearts:5, shake:0,
+  player:{x:W/2, y:H*0.78, r:26, bob:0},
+  projectiles:[], enemies:[], particles:[], floats:[],
+  spawnT:0, spawnEvery:1700, t:0
+};
+/* büyü durum makinesi */
+const S = {
+  mode:'idle',           // idle | charged
+  chargeMs:0, CHARGE_NEED:350,
+  cooldownUntil:0,
+  gunFrames:0, palmMs:0,
+  handSeen:false, lastHandTs:0,
+  cursor:{x:W/2,y:H/2,ok:false},    // el imleci (şarj topu burada durur)
+  aim:{x:W/2,y:H/3,ok:false},       // nişangah
+  simPinch:false, camMode:false
+};
+/* joistik */
+const J = {active:false,id:-1,ox:0,oy:0,dx:0,dy:0,max:52};
+
+function setStatus(t){ if(statusEl.textContent!==t) statusEl.textContent=t; }
+function vibrate(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} }
+function heartsDraw(){ heartsEl.textContent = '❤️'.repeat(Math.max(0,G.hearts)); }
+heartsDraw();
+
+/* ================= girişler: joistik + dokunma ================= */
+addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('pointerdown',e=>{
+  if(!G.running) return;
+  if(e.target.closest('#simBar')) return;
+  if(e.clientX > W*0.5){                      // sağ yarı → joistik
+    if(!J.active){ J.active=true; J.id=e.pointerId; J.ox=e.clientX; J.oy=e.clientY; J.dx=0; J.dy=0; }
+  } else {                                    // sol yarı → dokunarak nişan+ateş (yedek / sim modu)
+    S.aim.x=e.clientX; S.aim.y=e.clientY; S.aim.ok=true;
+    tryFire(true);
+  }
+});
+addEventListener('pointermove',e=>{
+  if(J.active && e.pointerId===J.id){
+    J.dx=e.clientX-J.ox; J.dy=e.clientY-J.oy;
+    const m=Math.hypot(J.dx,J.dy);
+    if(m>J.max){ J.dx*=J.max/m; J.dy*=J.max/m; }
+  }
+});
+function endPointer(e){ if(J.active && e.pointerId===J.id){ J.active=false; J.dx=0; J.dy=0; } }
+addEventListener('pointerup',endPointer); addEventListener('pointercancel',endPointer);
+
+/* sim modu şarj butonu */
+const btnCharge=document.getElementById('btnCharge');
+btnCharge.addEventListener('pointerdown',e=>{ e.stopPropagation(); S.simPinch=true; });
+addEventListener('pointerup',()=>{ S.simPinch=false; });
+
+/* ================= MediaPipe el takibi ================= */
+let landmarker=null;
+async function initCamera(){
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:'user', width:{ideal:640}, height:{ideal:480}}, audio:false});
+  video.srcObject=stream; await video.play();
+  const {FilesetResolver, HandLandmarker} =
+    await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm');
+  const vision = await FilesetResolver.forVisionTasks(
+    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+  const opts = d => ({baseOptions:{modelAssetPath:
+    'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+    delegate:d}, runningMode:'VIDEO', numHands:1});
+  try { landmarker = await HandLandmarker.createFromOptions(vision, opts('GPU')); }
+  catch(e){ landmarker = await HandLandmarker.createFromOptions(vision, opts('CPU')); }
+  S.camMode=true; pip.style.display='block';
+}
+
+/* kamera koordinatı → ekran (aynalı + rahatlık için genişletilmiş) */
+function mapN(v){ return Math.min(1,Math.max(0,(v-0.15)/0.7)); }
+function toScreen(lm){ return { x: mapN(1-lm.x)*W, y: mapN(lm.y)*H }; }
+const d2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+
+function analyzeHand(lm){
+  const scale=d2(lm[0],lm[9]) || 1e-6;
+  const pinch = d2(lm[4],lm[8]) < scale*0.45;
+  const ext = (tip,pipJ)=> d2(lm[tip],lm[0]) > d2(lm[pipJ],lm[0])*1.12;
+  const i=ext(8,6), m=ext(12,10), r=ext(16,14), p=ext(20,18);
+  return { pinch, gun: i&&m&&!r&&!p&&!pinch, palm: i&&m&&r&&p&&!pinch };
+}
+
+let lastVideoTs=-1;
+function readHand(now){
+  let pose={pinch:S.simPinch, gun:false, palm:false}, lm=null;
+  if(S.camMode && landmarker && video.readyState>=2){
+    try{
+      if(video.currentTime!==lastVideoTs){
+        lastVideoTs=video.currentTime;
+        const res=landmarker.detectForVideo(video, now);
+        lm = (res.landmarks && res.landmarks[0]) || null;
+      }
+    }catch(e){}
+    if(lm){
+      S.handSeen=true; S.lastHandTs=now;
+      const a=analyzeHand(lm);
+      pose={pinch:a.pinch||S.simPinch, gun:a.gun, palm:a.palm};
+      const c=toScreen(lm[9]); S.cursor.x+= (c.x-S.cursor.x)*0.4; S.cursor.y+=(c.y-S.cursor.y)*0.4; S.cursor.ok=true;
+      if(a.gun){ const t=toScreen(lm[8]); S.aim.x+=(t.x-S.aim.x)*0.35; S.aim.y+=(t.y-S.aim.y)*0.35; S.aim.ok=true; }
+    } else { S.cursor.ok=false; if(now-S.lastHandTs>1500){ S.handSeen=false; if(S.mode==='charged') cancelSpell(); } }
+    drawPip(lm, pose);
+  }
+  return pose;
+}
+
+/* ================= büyü mantığı ================= */
+function updateSpell(pose, dt, now){
+  if(now < S.cooldownUntil) { setSpellStatus(now); return; }
+  if(S.mode==='idle'){
+    if(pose.pinch){ S.chargeMs+=dt; if(S.chargeMs>=S.CHARGE_NEED){ S.mode='charged'; S.chargeMs=S.CHARGE_NEED; vibrate(30);} }
+    else S.chargeMs=Math.max(0,S.chargeMs-dt*2);
+  } else if(S.mode==='charged'){
+    if(pose.gun) S.gunFrames++; else S.gunFrames=0;
+    if(S.gunFrames>=3){ tryFire(false); }
+    if(pose.palm) { S.palmMs+=dt; if(S.palmMs>300) cancelSpell(); } else S.palmMs=0;
+  }
+  setSpellStatus(now);
+}
+function tryFire(fromTap){
+  if(S.mode!=='charged') return;
+  if(!S.aim.ok && !fromTap) return;
+  const p=G.player;
+  const dx=S.aim.x-p.x, dy=S.aim.y-p.y, m=Math.hypot(dx,dy)||1;
+  G.projectiles.push({x:p.x, y:p.y-p.r, vx:dx/m*950, vy:dy/m*950, r:10, life:2000});
+  S.mode='idle'; S.chargeMs=0; S.gunFrames=0; S.cooldownUntil=performance.now()+260;
+  vibrate(50); G.shake=Math.min(G.shake+4,8);
+}
+function cancelSpell(){
+  S.mode='idle'; S.chargeMs=0; S.palmMs=0; S.gunFrames=0;
+  const c=S.cursor.ok?S.cursor:{x:G.player.x,y:G.player.y-60};
+  for(let i=0;i<10;i++) G.particles.push(newPart(c.x,c.y,'#8d81ff',2));
+}
+function setSpellStatus(now){
+  if(G.over) return;
+  if(!S.camMode){ setStatus(S.mode==='charged' ? '🔥 Hazır! Sol yarıya dokun → fırlat' : '👌 Şarj butonunu basılı tut'); return; }
+  if(!S.handSeen){ setStatus('✋ Sol elini kameraya göster'); return; }
+  if(S.mode==='charged'){ setStatus('🔥 Ateş topu hazır — 👉 silah pozuyla nişan al!'); return; }
+  if(S.chargeMs>40){ setStatus('✨ Şarj oluyor…'); return; }
+  setStatus('👌 Baş + işaret parmağını birleştir → ateş topu');
+}
+
+/* ================= düşmanlar & parçacıklar ================= */
+function spawnEnemy(){
+  const r=20+Math.random()*10;
+  G.enemies.push({x:40+Math.random()*(W-80), y:-r-10, r,
+    vy:34+Math.random()*30+G.score*0.35, wob:Math.random()*6.28, hp:1});
+}
+function newPart(x,y,col,sp){
+  const a=Math.random()*6.28, v=(40+Math.random()*160)*sp;
+  return {x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:1,col,r:2+Math.random()*3};
+}
+function explode(x,y){
+  for(let i=0;i<20;i++) G.particles.push(newPart(x,y,i%3?'#ffb347':'#ff5e3a',3));
+  G.shake=Math.min(G.shake+6,12);
+}
+
+/* ================= güncelleme ================= */
+let lastT=performance.now();
+function update(now){
+  const dt=Math.min(50, now-lastT); lastT=now; G.t=now;
+  if(!G.running) return;
+  const pose=readHand(now);
+  updateSpell(pose, dt, now);
+
+  /* oyuncu hareketi */
+  const p=G.player, sp=0.36;
+  p.x+=J.dx/J.max*sp*dt*1.6; p.y+=J.dy/J.max*sp*dt*1.6;
+  p.x=Math.max(p.r,Math.min(W-p.r,p.x));
+  p.y=Math.max(H*0.35,Math.min(H-p.r-20,p.y));
+  p.bob+=dt*0.004;
+
+  /* düşman üretimi */
+  G.spawnT+=dt;
+  const every=Math.max(700, G.spawnEvery - G.score*8);
+  if(G.spawnT>every){ G.spawnT=0; spawnEnemy(); }
+
+  /* düşmanlar */
+  for(let i=G.enemies.length-1;i>=0;i--){
+    const e=G.enemies[i];
+    e.y+=e.vy*dt/1000; e.wob+=dt*0.003; e.x+=Math.sin(e.wob)*0.5;
+    if(e.y>H+e.r){ G.enemies.splice(i,1); G.hearts--; heartsDraw(); G.shake=10;
+      if(G.hearts<=0) return endGame(); continue; }
+    const dx=e.x-p.x, dy=e.y-p.y;
+    if(Math.hypot(dx,dy)<e.r+p.r){ G.enemies.splice(i,1); explode(e.x,e.y); G.hearts--; heartsDraw();
+      if(G.hearts<=0) return endGame(); }
+  }
+
+  /* mermiler */
+  for(let i=G.projectiles.length-1;i>=0;i--){
+    const b=G.projectiles[i];
+    b.x+=b.vx*dt/1000; b.y+=b.vy*dt/1000; b.life-=dt;
+    if(Math.random()<0.6) G.particles.push({x:b.x,y:b.y,vx:(Math.random()-0.5)*40,vy:(Math.random()-0.5)*40,
+      life:0.5,col:'#ff9e3d',r:2+Math.random()*2});
+    let hit=false;
+    for(let k=G.enemies.length-1;k>=0;k--){
+      const e=G.enemies[k];
+      if(Math.hypot(e.x-b.x,e.y-b.y)<e.r+b.r){
+        G.enemies.splice(k,1); explode(e.x,e.y); G.score+=10; scoreEl.textContent=G.score;
+        G.floats.push({x:e.x,y:e.y,t:'+10',life:1}); hit=true; break; }
+    }
+    if(hit || b.life<=0 || b.x<-40||b.x>W+40||b.y<-40||b.y>H+40) G.projectiles.splice(i,1);
+  }
+
+  /* parçacıklar & yazılar */
+  for(let i=G.particles.length-1;i>=0;i--){ const q=G.particles[i];
+    q.x+=q.vx*dt/1000; q.y+=q.vy*dt/1000; q.life-=dt/600; if(q.life<=0) G.particles.splice(i,1); }
+  for(let i=G.floats.length-1;i>=0;i--){ const f=G.floats[i];
+    f.y-=dt*0.04; f.life-=dt/900; if(f.life<=0) G.floats.splice(i,1); }
+  G.shake*=Math.pow(0.9, dt/16);
+}
+
+/* ================= çizim ================= */
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  /* arkaplan */
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#160b38'); g.addColorStop(0.6,'#0e0726'); g.addColorStop(1,'#070313');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  /* yıldızlar */
+  ctx.fillStyle='rgba(255,255,255,.5)';
+  for(let i=0;i<40;i++){ const sx=(i*97)%W, sy=(i*211)%H, tw=(Math.sin(G.t*0.001+i)+1)/2;
+    ctx.globalAlpha=0.15+tw*0.35; ctx.fillRect(sx,sy,2,2); }
+  ctx.globalAlpha=1;
+
+  ctx.save();
+  if(G.shake>0.5) ctx.translate((Math.random()-0.5)*G.shake,(Math.random()-0.5)*G.shake);
+
+  /* düşmanlar: ruh küreleri */
+  for(const e of G.enemies){
+    const gr=ctx.createRadialGradient(e.x,e.y,2,e.x,e.y,e.r*1.4);
+    gr.addColorStop(0,'rgba(120,240,255,.9)'); gr.addColorStop(0.5,'rgba(50,140,220,.45)'); gr.addColorStop(1,'rgba(50,140,220,0)');
+    ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(e.x,e.y,e.r*1.4,0,6.28); ctx.fill();
+    ctx.fillStyle='#0a2a4a'; ctx.beginPath(); ctx.arc(e.x,e.y,e.r*0.75,0,6.28); ctx.fill();
+    ctx.fillStyle='#9ff'; ctx.font=`${e.r}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('✦',e.x,e.y+1);
+  }
+
+  /* mermiler */
+  for(const b of G.projectiles){
+    const gr=ctx.createRadialGradient(b.x,b.y,1,b.x,b.y,b.r*2.4);
+    gr.addColorStop(0,'#fff3c0'); gr.addColorStop(0.4,'#ffb347'); gr.addColorStop(1,'rgba(255,90,40,0)');
+    ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(b.x,b.y,b.r*2.4,0,6.28); ctx.fill();
+  }
+
+  /* parçacıklar */
+  for(const q of G.particles){ ctx.globalAlpha=Math.max(0,q.life); ctx.fillStyle=q.col;
+    ctx.beginPath(); ctx.arc(q.x,q.y,q.r,0,6.28); ctx.fill(); }
+  ctx.globalAlpha=1;
+
+  /* büyücü */
+  drawWizard(G.player);
+
+  /* şarj topu — el imlecinde (veya büyücünün üstünde) */
+  if(S.chargeMs>30 || S.mode==='charged'){
+    const c = S.cursor.ok ? S.cursor : {x:G.player.x, y:G.player.y-70};
+    const prog=S.chargeMs/S.CHARGE_NEED;
+    const r=6+prog*14+Math.sin(G.t*0.02)*(S.mode==='charged'?3:0);
+    const gr=ctx.createRadialGradient(c.x,c.y,1,c.x,c.y,r*2.6);
+    gr.addColorStop(0,'#fff'); gr.addColorStop(0.35,'#ffb347'); gr.addColorStop(1,'rgba(255,80,40,0)');
+    ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(c.x,c.y,r*2.6,0,6.28); ctx.fill();
+    if(S.mode!=='charged'){ /* şarj halkası */
+      ctx.strokeStyle='rgba(255,210,120,.9)'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.arc(c.x,c.y,r+10,-Math.PI/2,-Math.PI/2+prog*6.28); ctx.stroke(); }
+  }
+
+  /* nişangah */
+  if(S.mode==='charged' && S.aim.ok){
+    const a=S.aim, r=16+Math.sin(G.t*0.015)*3;
+    ctx.strokeStyle='#ff8f5e'; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(a.x,a.y,r,0,6.28); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(a.x-r-8,a.y); ctx.lineTo(a.x-r+4,a.y); ctx.moveTo(a.x+r-4,a.y); ctx.lineTo(a.x+r+8,a.y);
+    ctx.moveTo(a.x,a.y-r-8); ctx.lineTo(a.x,a.y-r+4); ctx.moveTo(a.x,a.y+r-4); ctx.lineTo(a.x,a.y+r+8);
+    ctx.stroke();
+    /* büyücüden nişangaha kesikli çizgi */
+    ctx.setLineDash([4,10]); ctx.strokeStyle='rgba(255,143,94,.35)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(G.player.x,G.player.y-G.player.r); ctx.lineTo(a.x,a.y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  /* skor yazıları */
+  ctx.textAlign='center'; ctx.font='bold 16px sans-serif';
+  for(const f of G.floats){ ctx.globalAlpha=Math.max(0,f.life); ctx.fillStyle='#ffd166'; ctx.fillText(f.t,f.x,f.y); }
+  ctx.globalAlpha=1;
+  ctx.restore();
+
+  /* joistik */
+  if(J.active){
+    ctx.globalAlpha=0.35; ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.arc(J.ox,J.oy,J.max,0,6.28); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(J.ox,J.oy,J.max,0,6.28); ctx.stroke();
+    ctx.globalAlpha=0.6;
+    ctx.beginPath(); ctx.arc(J.ox+J.dx,J.oy+J.dy,24,0,6.28); ctx.fill();
+    ctx.globalAlpha=1;
+  } else if(G.running && !G.over){
+    ctx.globalAlpha=0.18; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.font='13px sans-serif';
+    ctx.fillText('🕹️ sağ yarıda sürükle', W*0.75, H-30+ (Math.sin(G.t*0.003)*3)); ctx.globalAlpha=1;
+  }
+}
+function drawWizard(p){
+  const bobY=Math.sin(p.bob)*4;
+  const x=p.x, y=p.y+bobY;
+  /* halo */
+  const gr=ctx.createRadialGradient(x,y,4,x,y,60);
+  gr.addColorStop(0,'rgba(160,107,255,.35)'); gr.addColorStop(1,'rgba(160,107,255,0)');
+  ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(x,y,60,0,6.28); ctx.fill();
+  /* cübbe */
+  ctx.fillStyle='#4b2ea8';
+  ctx.beginPath(); ctx.moveTo(x-20,y+26); ctx.quadraticCurveTo(x,y-34,x+20,y+26); ctx.closePath(); ctx.fill();
+  /* kafa */
+  ctx.fillStyle='#f2d5b1'; ctx.beginPath(); ctx.arc(x,y-16,10,0,6.28); ctx.fill();
+  /* şapka */
+  ctx.fillStyle='#5b2ee0';
+  ctx.beginPath(); ctx.moveTo(x-16,y-20); ctx.lineTo(x+16,y-20); ctx.lineTo(x+2,y-46); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#ffd166'; ctx.beginPath(); ctx.arc(x+2,y-46,3,0,6.28); ctx.fill();
+  /* gözler */
+  ctx.fillStyle='#222'; ctx.beginPath(); ctx.arc(x-4,y-16,1.6,0,6.28); ctx.arc(x+4,y-16,1.6,0,6.28); ctx.fill();
+}
+
+/* ================= PiP (kamera önizleme) ================= */
+function drawPip(lm, pose){
+  const w=pip.width, h=pip.height;
+  pctx.fillStyle='#000'; pctx.fillRect(0,0,w,h);
+  if(video.videoWidth){
+    const vr=video.videoWidth/video.videoHeight, pr=w/h;
+    let sw,sh,sx,sy;
+    if(vr>pr){ sh=video.videoHeight; sw=sh*pr; sx=(video.videoWidth-sw)/2; sy=0; }
+    else { sw=video.videoWidth; sh=sw/pr; sx=0; sy=(video.videoHeight-sh)/2; }
+    pctx.save(); pctx.translate(w,0); pctx.scale(-1,1);
+    pctx.drawImage(video,sx,sy,sw,sh,0,0,w,h); pctx.restore();
+    if(lm){
+      const mx=v=> (1-((v.x*video.videoWidth)-sx)/sw)*w, my=v=> (((v.y*video.videoHeight)-sy)/sh)*h;
+      pctx.fillStyle = pose.pinch ? '#ffb347' : (pose.gun ? '#ff5e8a' : '#6ee7a0');
+      for(const q of lm){ pctx.beginPath(); pctx.arc(mx(q),my(q),3,0,6.28); pctx.fill(); }
+    }
+  }
+}
+
+/* ================= akış ================= */
+let overAt=0;
+function endGame(){
+  G.over=true; G.running=false; overAt=performance.now();
+  document.getElementById('finalScore').textContent=G.score;
+  document.getElementById('gameOver').style.display='flex';
+  setStatus('');
+}
+function resetGame(){
+  G.score=0; scoreEl.textContent='0'; G.hearts=5; heartsDraw();
+  G.enemies.length=0; G.projectiles.length=0; G.particles.length=0; G.floats.length=0;
+  G.player.x=W/2; G.player.y=H*0.78; G.over=false; G.running=true; G.spawnT=1200;
+}
+function retry(){ if(!G.over || performance.now()-overAt<600) return;
+  document.getElementById('gameOver').style.display='none'; resetGame(); }
+const rbtn=document.getElementById('retryBtn');
+rbtn.addEventListener('click',retry);
+rbtn.addEventListener('touchend',e=>{ e.preventDefault(); retry(); },{passive:false});
+const gov=document.getElementById('gameOver');
+['pointerdown','touchstart'].forEach(ev=>
+  gov.addEventListener(ev,e=>{ e.preventDefault(); retry(); },{passive:false}));
+let started=false;
+async function startGame(){
+  if(started) return; started=true;
+  /* oyun hemen başlar; kamera arka planda denenir */
+  document.getElementById('startOv').style.display='none';
+  document.getElementById('simBar').style.display='flex';
+  resetGame();
+  setStatus('📷 Kamera deneniyor…');
+  const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('camera-timeout')),6000));
+  try {
+    await Promise.race([initCamera(), timeout]);
+    document.getElementById('simBar').style.display='none';
+  } catch(e){
+    S.camMode=false;
+    setStatus('📷 Kamera yok — simülasyon modu');
+  }
+}
+const sbtn=document.getElementById('startBtn');
+sbtn.addEventListener('click',startGame);
+sbtn.addEventListener('pointerup',e=>{ e.stopPropagation(); startGame(); });
+sbtn.addEventListener('touchend',e=>{ e.preventDefault(); startGame(); },{passive:false});
+/* güvenlik ağı: başlangıç ekranında HERHANGİ bir dokunuş oyunu başlatır */
+const sov=document.getElementById('startOv');
+['pointerdown','touchstart','click'].forEach(ev=>
+  sov.addEventListener(ev,e=>{ e.preventDefault(); startGame(); },{passive:false}));
+(function loop(now){ update(now||performance.now()); draw(); requestAnimationFrame(loop); })();
+</script>
+</body>
+</html>
