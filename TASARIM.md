@@ -175,52 +175,32 @@ olan, kapalı olandan daha iyi:
 Baş parmak kapalı olduğunda silah, Toprak (işaret+serçe) ile karışmaya başlıyor —
 ikisi de baş parmağı avuçta tutan, iki parmağı açık pozlar haline geliyor.
 
-### 3.5 Savunma: karşı elementin mührü
+### 3.5 Savunma mührü YOK — beş elementin hepsi saldırıdır
 
-Savunma için ayrı bir mühür alfabesi **yok**. Gelen saldırıya karşı, onu yenen
-elementin mührünü yaparsın:
+Ayrı bir savunma mührü, savunma modu ya da kalkan yok. **Beş mühür de saldırı üretir.**
+Gelen bir saldırıya karşı yalnızca iki cevap vardır:
 
-| Gelen saldırı | Yapman gereken mühür |
-|---|---|
-| 🔥 Ateş | 💧 Su — 🤟 üç parmak |
-| 🌪 Hava | 🔥 Ateş — 👌 baş parmak + işaret |
-| ⚡ Yıldırım | 🌪 Hava — 🖐 açık avuç |
-| 🪨 Toprak | ⚡ Yıldırım — 🤙 baş parmak + serçe |
-| 💧 Su | 🪨 Toprak — 🤘 işaret + serçe |
+| Cevap | Nasıl | Maliyeti |
+|---|---|---|
+| **Karşı atış** | Kendi saldırını gelenin içine at — havada çarpışır (bkz. 4.2) | Doğru elementi seçmek + yetiştirmek gerekir |
+| **Siper** | Arena objesinin arkasına gir | Konumunu kaybedersin, saldıramazsın |
 
-Bu seçimin büyük avantajı: tanınması gereken jest sayısı **10 değil 5**. Aynı mühür
-bağlama göre saldırı ya da savunma okunur — havada sana gelen bir mermi varsa savunma,
-yoksa saldırı.
+Bu, savunmayı ayrı bir sistem olmaktan çıkarıp **saldırının kendisine** gömüyor:
+karşılık vermek, aynı zamanda karşı saldırı başlatmaktır. Nişan alıp doğru elementi
+seçmek hem savunma hem hücum hamlesi olur — pasif bir "bloke et" düğmesi yok.
 
-**Savunmada silah pozu YOK.** Saldırı `diz → 👉 kapat → yüklen → ateşle` akışını
-izler; savunma ise tek mührün tanınmasıyla **anında** tetiklenir. Sebep tempo:
-düşmanın telegrafı ~1.1 sn ve savunma mührünü yapmak zaten bunun çoğunu yiyor —
-üstüne bir de silah pozu istemek savunmayı yetişilmez kılar. Bu ayrım aynı zamanda
-iki modu birbirinden temiz ayırıyor: **saldırı kasıtlı ve dizili, savunma refleks.**
+Doğrudan sonucu: **tanınması gereken jest kümesi 5 mühür + silah pozu ile sınırlı
+kalıyor.** Bağlam ayrımı da ortadan kalkıyor; her mühür her zaman aynı şeyi yapar.
 
-### 3.6 Tek elementli oyuncu sorunu ve çözümü
+**Tek elementli oyuncu ne yapar?** Karşı atış yalnızca kendi elementinin yendiği ya da
+nötr olduğu saldırılara karşı işe yarar; kendisini yenen elemente karşı çarpışmayı
+kaybeder. O durumda siper tek seçenektir. Bu bir eksiklik değil, ilerlemenin motoru:
+ikinci elementi açmanın somut sebebi tam olarak budur.
 
-**Gerilim:** Oyuncu tek elementle başlıyor. Savunma karşı elementin mührünü
-gerektiriyorsa, tek elementli oyuncu yalnızca **bir** element türüne karşı
-savunabilir — diğer dördüne karşı çaresiz kalır.
+> **Not:** "Karşı elementin mührüyle savunma" fikri tasarımdan çıkarıldı. İleride
+> geri gelirse, mevcut çarpışma çözümü zaten altyapısını sağlıyor.
 
-**Çözüm — savunma serbest, saldırı ustalığa bağlı:**
-
-- **Savunma mührü ilk andan itibaren beş element için de yapılabilir.** Savunmada mühür
-  hasar vermez, yalnızca gelen saldırıyı karşılar; bu yüzden "ustalık" şartı aranmaz.
-- **Saldırı yalnızca ustalaşılmış elementlerle yapılabilir.** İlerleme burada:
-  saldırı çeşitliliği ve gücü açılır.
-- Ustalaşılmamış bir elementle yapılan savunma **zayıftır**: yalnızca merminin
-  yeterince erken karşılanması hâlinde nötrler, geç kalınırsa sıyırma hasarı geçer.
-  Ustalaşılmış elementle savunma hem daha geniş zaman penceresine sahiptir hem de
-  karşı-itme (rakibi geri savurma) yapar.
-- **Siper her zaman geçerli.** Mühür yetiştiremediğin an arena objelerinin arkasına
-  girmek en garanti savunmadır — tasarımın açık kaçış valfi budur.
-
-Böylece tek elementli oyuncu hayatta kalabilir, ilerleme hâlâ anlamlıdır, ve
-"refleks arttıkça çoklu element" hedefi korunur.
-
-### 3.7 Beceri tablosu — ilk taslak
+### 3.6 Beceri tablosu — ilk taslak
 
 **Tasarım ilkesi: ezber değil türetme.** İki mühürlük 25 kombinasyonu tek tek
 ezberletmek yerine, beceriler **döngüdeki ilişkiden** türetiliyor. Oyuncu tabloyu
@@ -360,11 +340,12 @@ daha temiz yapan üstün gelir — mekanik böylece "kim daha iyi mühür yapıy
 Delip geçen mermi hedefe kilitlendiği için kaçınmanın tek yolu **sipere girmektir** —
 bu da "en garanti savunma objelerin arkası" ilkesini mekanik olarak zorunlu kılar.
 
-### 4.3 Savunma mührü çarpışması
+### 4.3 Karşı atış
 
-Savunma mührü, kendi elementinde ve savunanın gücüyle bir **karşılama mermisi** üretir;
-sonra yukarıdaki aynı kurallar işler. Yani savunma ayrı bir sistem değil, saldırının
-özel hâli. Tek fark: savunma mermisi menzil olarak kısadır ve savunanın önünde oluşur.
+Gelen bir saldırıyı durdurmanın tek aktif yolu kendi saldırını içine atmaktır; ayrı
+bir karşılama mekaniği yok, yukarıdaki çarpışma kuralları aynen işler. Pratikte bu
+şu anlama gelir: **nişan ve zamanlama, savunmanın kendisidir.** Geç kalırsan ya da
+yanlış elementi seçersen mermi seni bulur — geriye siper kalır.
 
 ---
 
@@ -372,10 +353,10 @@ sonra yukarıdaki aynı kurallar işler. Yani savunma ayrı bir sistem değil, s
 
 - Her element için ayrı **ustalık seviyesi** (0–5).
 - Oyuna başlarken oyuncu **bir element seçer**, o element seviye 1'de başlar.
-- Ustalık artışı: o elementle isabet, başarılı savunma, ve temiz mühür kalitesi.
+- Ustalık artışı: o elementle isabet, kazanılan havada çarpışma, ve temiz mühür kalitesi.
 - Yeni element açılışı: belli bir toplam ustalık + refleks eşiği (ortalama tepki süresi)
   aşıldığında bir sonraki element saldırıya açılır.
-- Ustalık etkisi: mermi gücü, mühür onay penceresi genişliği, savunma zaman penceresi.
+- Ustalık etkisi: mermi gücü, mühür onay penceresi genişliği, yükleme süresi.
 
 ---
 
@@ -406,7 +387,7 @@ sonra yukarıdaki aynı kurallar işler. Yani savunma ayrı bir sistem değil, s
 
 Düşman element seçimi görünür olmalı: paleti elementinin rengini taşır
 (🔥 kızıl, 💧 mavi, 🪨 toprak sarısı, 🌪 açık yeşil, ⚡ mor-beyaz).
-Böylece oyuncu daha çarpışma başlamadan hangi savunmaya hazırlanacağını bilir.
+Böylece oyuncu daha çarpışma başlamadan hangi elementle karşılık vereceğini bilir.
 
 ---
 
@@ -425,7 +406,7 @@ ya da WebSocket röle (kurulumu kolay, sunucu gerekir).
 
 | Faz | İçerik | Çıktı |
 |---|---|---|
-| **1** | Mühür tanıma katmanı: 5 mühür + zaman kilidi + belirsizlik reddi | Sentetik iskelet testleri + ekranda canlı mühür test alanı |
+| **1** | Mühür tanıma katmanı: 5 mühür + 👉 silah pozu, zaman kilidi, belirsizlik reddi, dizi motoru | Sentetik iskelet testleri + ekranda canlı mühür/dizi test alanı |
 | **2** | Element çekirdeği: mermi, güç, havada çarpışma, delme/nötrleme, siper | Tek düşmanla oynanabilir düello |
 | **3** | PvE: 1–3 düşman, davranış, can, ustalık ve ilerleme | Tam oynanabilir tek kişilik oyun |
 | **4** | PvP 1v1: taşıma katmanı + lockstep | İki kişilik düello |
