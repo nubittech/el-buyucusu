@@ -290,7 +290,7 @@ const AR=30; /* arena yarı-boyu */
 const MU=window.MUHUR;                       /* paylaşılan mühür/element katmanı */
 const EL_IDS=Object.keys(MU.ELEM);
 const OY_CAN=100, EN_CAN=100;                /* düello birkaç doğru okuma sürsün */
-const MAX_DUSMAN=3;                          /* spam yok: aynı anda en fazla 3 */
+const MAX_DUSMAN=1;                          /* tek tek gelsinler: aynı anda tek düşman */
 const TELEGRAF=1100;                         /* düşman mührünü bu kadar önce belli eder */
 const G={running:false,over:false,score:0,can:OY_CAN,flash:0,spawnT:1,t:0};
 const P={x:0,z:0,yaw:0,targetYaw:0,r:0.55};
@@ -595,7 +595,7 @@ function updateCamera(dt){
 function updateEnemies(dt,now){
   /* Spam yok: en fazla MAX_DUSMAN, ve yeni düşman ancak arada boşluk varken gelir. */
   G.spawnT-=dt;
-  if(G.spawnT<=0&&enemies.length<MAX_DUSMAN){ spawnEnemy(); G.spawnT=4.5+Math.random()*2.5; }
+  if(G.spawnT<=0&&enemies.length<MAX_DUSMAN){ spawnEnemy(); G.spawnT=2.5+Math.random()*1.8; }
   for(let i=enemies.length-1;i>=0;i--){const e=enemies[i];
     e.bob+=dt*3;
     const dx=P.x-e.x,dz=P.z-e.z,d=Math.hypot(dx,dz)||1e-4;
@@ -867,9 +867,7 @@ function render(now){
     const ec=MU.ELEM[e.el].renk;
     if(e.kind==='ninja') draw(GEO.sph,mModel(e.x,0.35,e.z,0,1.15,0.7,1.15),ec,1,0.06);
     else draw(GEO.sph,mModel(e.x,eyOf(e),e.z,0,2.0,2.1,2.0),ec,1,0.09);
-    /* can halkası: dolduğu ölçüde geniş — düellonun nerede olduğunu zeminden oku */
-    const co=Math.max(0,e.can)/e.canMax;
-    draw(GEO.torus,M(mT(e.x,0.09,e.z),mS(1.1+co*1.5,1.2,1.1+co*1.5)),ec,1,0.30);
+
   }
   for(const s of shots){
     const r=(0.42+s.guc*0.20)*(s.deldi?1.2:1);
@@ -888,9 +886,42 @@ function render(now){
   }
   GL.depthMask(true);GL.disable(GL.BLEND);
 }
+/* dünya noktası → ekran pikseli (2B kaplama için). Kamera tabanı render ile aynı. */
+function dunyaEkran(x,y,z){
+  const dx=x-camX, dy=y-camY, dz=z-camZ;
+  const fx=camFx,fy=camFy,fz=camFz;
+  let rx=-fz,ry=0,rz=fx; const rl=Math.hypot(rx,rz)||1; rx/=rl; rz/=rl;
+  const ux=ry*fz-rz*fy, uy=rz*fx-rx*fz, uz=rx*fy-ry*fx;
+  const zc=dx*fx+dy*fy+dz*fz;
+  if(zc<0.25) return null;                      /* kameranın arkasında */
+  const xc=dx*rx+dy*ry+dz*rz, yc=dx*ux+dy*uy+dz*uz;
+  const th=Math.tan(FOV/2), asp=W/H;
+  return {x:((xc/zc)/(th*asp)*0.5+0.5)*W, y:(0.5-(yc/zc)/th*0.5)*H, z:zc};
+}
+/* düşmanın başının üstünde can barı + elementi */
+function cizDusmanCan(){
+  for(const e of enemies){
+    const tepe=(e.kind==='ninja'?2.15:eyOf(e)+1.15);
+    const p=dunyaEkran(e.x,tepe,e.z); if(!p) continue;
+    const o=Math.max(0,e.can)/e.canMax;
+    const w=56,h=6, x=p.x-w/2, y=p.y;
+    const sol=Math.max(0.25,Math.min(1,14/p.z));          /* uzaktakiler sönükleşsin */
+    ctx.globalAlpha=sol;
+    ctx.fillStyle='rgba(8,4,20,.75)';
+    ctx.beginPath();ctx.roundRect(x-2,y-2,w+4,h+4,5);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.16)';
+    ctx.beginPath();ctx.roundRect(x,y,w,h,3);ctx.fill();
+    ctx.fillStyle='#'+MU.ELEM[e.el].renk.toString(16).padStart(6,'0');
+    if(o>0){ctx.beginPath();ctx.roundRect(x,y,w*o,h,3);ctx.fill();}
+    ctx.font='13px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillText(MU.BY[e.el].el,p.x,y-5);
+    ctx.globalAlpha=1;
+  }
+}
 function drawOverlay(now){
   ctx.clearRect(0,0,W,H);
   if(!G.running&&!G.over) return;
+  cizDusmanCan();
   /* hasar vinyeti */
   if(G.flash>0.01){
     const g=ctx.createRadialGradient(W/2,H/2,H*0.25,W/2,H/2,H*0.72);
