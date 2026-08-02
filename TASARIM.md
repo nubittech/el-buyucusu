@@ -122,7 +122,60 @@ bağımsız ve çok güçlü bir ayraç, sınıflandırıcıda ağırlığı yü
 - **Geçiş karesi bağışıklığı:** bir mühürden diğerine geçerken aradaki şekiller
   zaman kilidini dolduramadığı için tetiklenmez.
 
-### 3.4 Savunma: karşı elementin mührü
+### 3.4 Mühür dizisi, silah pozu ve ateşleme
+
+Saldırı tek mühürle bitmiyor. Mühürler **arka arkaya** yapılır, dizinin tamamı hangi
+beceriyi ürettiğini belirler. Değişmeyen tek şey dizinin **kapatıcısı**:
+
+> 👉 **Silah pozu** — işaret + orta parmak açık, yüzük ve serçe kapalı, baş parmak dik.
+> Bu poz görüldüğü an mühür seti **kapanır** ve el ateşlemeye hazır hale gelir.
+
+**Akış**
+
+1. **Diz** — element mühürleri sırayla yapılır (🔥 · 💧 · 🤘 …). Her mühür zaman
+   kilidiyle onaylanır ve diziye yazılır.
+2. **Kapat** — 👉 silah pozu diziyi kapatır.
+3. **Eşleştir** — kapanan dizi beceri tablosunda aranır.
+4. **Yüklen** — eşleşme varsa beceri yüklenir; el silah tutuşunda bekler, elde
+   elementin rengiyle enerji toplanır (v5.2'deki şarj görselinin devamı).
+5. **Ateşle** — silah tutuşundan tetikleme ile atış çıkar.
+
+**Kurallar**
+
+- **Eşleşme yoksa** beceri yüklenmez: dizi silinir ve kısa bir toparlanma gecikmesi
+  (~0.4 sn) uygulanır. Rastgele mühür savurmak cezalandırılır.
+- **Diziler arası zaman aşımı:** iki mühür arası **900 ms**'yi geçerse dizi sıfırlanır.
+- **En kısa dizi tek mühürdür:** 🔥 → 👉 = o elementin temel saldırısı. Yeni başlayan
+  oyuncu tek mühürle oynayabilir; uzun diziler bileşik ve güçlü becerileri açar.
+- **Silah pozu nişan da alır.** İşaret parmağının yönü hedefi belirler — `v5.2`'de
+  zaten böyle çalışıyor, korunacak.
+
+**Ölçüm — silah pozu diğer beş mühürle karışıyor mu?**
+
+Silah dizinin kapatıcısı olduğu için her dizinin sonunda geliyor; bir element
+mühründen silaha geçiş sık ve hızlı. En riskli görünen geçiş 💧 Su → 👉 Silah, çünkü
+aradaki tek fark yüzük parmağının kapanması. Ölçüldü:
+
+| | σ=%2.5 | σ=%4.5 | σ=%7.0 |
+|---|---|---|---|
+| 6 sınıflı doğruluk | %100.0 | %100.0 | %99.0 |
+| **Su ↔ Silah ayrımı** | **%100.0** | **%100.0** | **%100.0** |
+
+Risk gerçekleşmedi: Su'da yüzük parmağı tam açık, silahta tam kapalı — bu marjinal
+değil, güçlü bir fark. Silah pozunun eklenmesi setin genel doğruluğunu düşürmüyor.
+
+**Baş parmak dik olmalı.** İki tutuş karşılaştırıldı; baş parmak dik (klasik tabanca)
+olan, kapalı olandan daha iyi:
+
+| Silah tutuşu | Toprak 🤘 doğruluğu (σ=%7) |
+|---|---|
+| Baş parmak **dik** 👉 | %99.8 |
+| Baş parmak kapalı | %98.3 |
+
+Baş parmak kapalı olduğunda silah, Toprak (işaret+serçe) ile karışmaya başlıyor —
+ikisi de baş parmağı avuçta tutan, iki parmağı açık pozlar haline geliyor.
+
+### 3.5 Savunma: karşı elementin mührü
 
 Savunma için ayrı bir mühür alfabesi **yok**. Gelen saldırıya karşı, onu yenen
 elementin mührünü yaparsın:
@@ -139,7 +192,13 @@ Bu seçimin büyük avantajı: tanınması gereken jest sayısı **10 değil 5**
 bağlama göre saldırı ya da savunma okunur — havada sana gelen bir mermi varsa savunma,
 yoksa saldırı.
 
-### 3.5 Tek elementli oyuncu sorunu ve çözümü
+**Savunmada silah pozu YOK.** Saldırı `diz → 👉 kapat → yüklen → ateşle` akışını
+izler; savunma ise tek mührün tanınmasıyla **anında** tetiklenir. Sebep tempo:
+düşmanın telegrafı ~1.1 sn ve savunma mührünü yapmak zaten bunun çoğunu yiyor —
+üstüne bir de silah pozu istemek savunmayı yetişilmez kılar. Bu ayrım aynı zamanda
+iki modu birbirinden temiz ayırıyor: **saldırı kasıtlı ve dizili, savunma refleks.**
+
+### 3.6 Tek elementli oyuncu sorunu ve çözümü
 
 **Gerilim:** Oyuncu tek elementle başlıyor. Savunma karşı elementin mührünü
 gerektiriyorsa, tek elementli oyuncu yalnızca **bir** element türüne karşı
