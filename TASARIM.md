@@ -50,50 +50,60 @@ bazen ham güç ve ustalık belirlesin.
 
 ## 3. Mühür sistemi
 
-### 3.1 Mudralar nasıl seçildi
+### 3.1 Beş mühür
 
-Mühürler yoga mudra tablosundan seçildi. Seçim tahminle değil **ölçümle** yapıldı:
-tablodaki 11 mudra sentetik el iskeletiyle üretildi, MediaPipe hata modeli altında
-her ikilinin ayrılabilirliği hesaplandı, 462 olası 5'li kombinasyon içinden **en zayıf
-ikili ayrımı en yüksek olan** set seçildi.
+| Element | Mühür | El şekli |
+|---|---|---|
+| 🔥 Ateş | 👌 **Baş parmak + işaret** | Uçlar birleşik, diğer üç parmak açık |
+| 🌪 Hava | 🖐 **Açık avuç** | Beş parmak açık ve ayrık, avuç kameraya dönük |
+| 💧 Su | 🤟 **Üç parmak** | İşaret + orta + yüzük açık; serçe ve baş parmak kapalı |
+| ⚡ Yıldırım | 🤙 **Baş parmak + serçe** | İkisi açık, diğer üç parmak kapalı |
+| 🪨 Toprak | 🤘 **İşaret + serçe (rock)** | İkisi açık, orta ve yüzük kapalı |
+
+Bu setin ayırt edici gücü şurada: mühürler **hangi parmakların açık olduğunda**
+ayrışıyor — MediaPipe'ın en güvenilir okuduğu sinyal bu. Açıklık deseni (işaret,
+orta, yüzük, serçe) olarak:
+
+```
+Hava     1 1 1 1        Su       1 1 1 0
+Toprak   1 0 0 1        Yıldırım 0 0 0 1  (+ baş parmak açık)
+Ateş     0 1 1 1        (+ baş–işaret teması)
+```
+
+Yalnız iki çift tek parmakla ayrılıyor — Hava/Su (serçe) ve Toprak/Yıldırım (işaret) —
+ama ikisinde de **baş parmak konumu** ikinci bir bağımsız sinyal veriyor: Yıldırım'da
+baş parmak yana açık, Toprak'ta avuçta kapalı.
+
+### 3.2 Ölçülen dayanıklılık
+
+Seçim tahminle değil ölçümle doğrulandı: her mühür sentetik el iskeletiyle üretildi,
+MediaPipe hata modeli altında 2500 örnek/mühür sınıflandırıldı.
 
 Hata modeli kritik: bağımsız gauss gürültü MediaPipe'ı temsil etmiyor. Gerçekte baş
 parmağın **örttüğü** parmak ucu görünmez olur, ağ onu tahmin eder ve hata hem büyür
-hem de parmağın kökü yönünde sistematik kayar. Modele bu kapanma etkisi eklendiğinde
-zayıf çiftler ortaya çıktı — hepsi **aynı parmağa değen** mudra çiftleri:
-
-| Karışan çift | σ=%7'de ayrım |
-|---|---|
-| Surya (baş+yüzük) ↔ Pran (baş+yüzük+serçe) | %82 |
-| Gyan (baş+işaret) ↔ Vayu (işaret katlı) | %86 |
-| Shuni (baş+orta) ↔ Vata-naashak (baş+iş+orta) | %91 |
-| Buddhi (baş+serçe) ↔ Pran (baş+yüzük+serçe) | %91 |
-
-Bu yüzden **çoklu değme mudraları (Pran, Rudra, Apana, Vata-naashak) elendi**: hem
-yapması zor hem de tekli değme mudralarıyla karışıyorlar.
-
-### 3.2 Seçilen beş mühür
-
-| Element | Mudra | El şekli | Neden bu element |
-|---|---|---|---|
-| 🔥 Ateş | **Surya** | Baş parmak + **yüzük** parmağı uçları birleşik, diğer üçü açık | Surya = Güneş |
-| 💧 Su | **Gyan** | Baş parmak + **işaret** uçları birleşik, diğer üçü açık | Halka = damla, akış |
-| 🪨 Toprak | **Shuni** | Baş parmak + **orta** parmak uçları birleşik, diğer üçü açık | Shuni = Satürn, istikrar |
-| 🌪 Hava | **Abhaya** | Avuç tamamen açık, parmaklar ayrık, kameraya dönük | Açık avuç = yayılan esinti |
-| ⚡ Yıldırım | **Tarjani** | Yalnız işaret parmağı açık, diğerleri kapalı | Tek noktaya inen yıldırım |
-
-Üç mudra "baş parmak + bir parmak" ailesinden (işaret / orta / yüzük), ikisi tamamen
-farklı siluetten (tam açık avuç, tek parmak). Bu karışım hem öğrenmesi kolay bir
-mantık kurar — *"hangi parmağa değiyorsun"* — hem de ölçümde en temiz ayrımı verir.
-
-**Ölçülen dayanıklılık** (5 sınıflı, en yakın prototip, 1500 örnek/mudra):
+hem de parmağın kökü yönünde sistematik kayar. Ölçüm bu kapanma etkisiyle yapıldı.
 
 | Landmark gürültüsü | Doğruluk | En zayıf çift |
 |---|---|---|
 | σ = %2.5 | %100.0 | — |
 | σ = %4.5 | %100.0 | — |
-| σ = %7.0 | %98.5 | Gyan ↔ Shuni (%98.7) |
-| σ = %10.0 | %90.3 | Shuni ↔ Surya (%91.8) |
+| σ = %7.0 | %99.4 | Ateş ↔ Hava (%98.8) |
+| σ = %10.0 | %96.0 | Ateş ↔ Hava (%93.8) |
+
+**Tek zayıf nokta Ateş ↔ Hava.** Sebebi: Ateş'te işaret parmağı baş parmağa değmek
+için bükülür ama diğer üçü açıktır; ağır gürültüde işaret "açık" okunursa el açık
+avuca benzer. Panzehir zaten elde: baş parmak–işaret ucu mesafesi (temas sinyali)
+bağımsız ve çok güçlü bir ayraç, sınıflandırıcıda ağırlığı yüksek tutulacak.
+
+**"Üç parmak" hangi üçü?** İki okuma da ölçüldü:
+
+| Okuma | σ=%7 | σ=%10 |
+|---|---|---|
+| İşaret + orta + yüzük | **%99.4** | **%96.0** |
+| Orta + yüzük + serçe | %96.8 | %90.0 |
+
+İşaret+orta+yüzük seçildi: hem daha doğal hem ölçümde belirgin biçimde daha sağlam
+(ikinci okuma Ateş ile karışıyor, çünkü ikisinde de işaret parmağı kapalı görünüyor).
 
 > **Uyarı:** Bu rakamlar sentetik iskelet üzerinden. Gerçek MediaPipe hatası bu modelin
 > tam kopyası değil. Faz 1'de gerçek kamerayla doğrulanmadan Faz 2'ye geçilmeyecek.
@@ -118,11 +128,11 @@ elementin mührünü yaparsın:
 
 | Gelen saldırı | Yapman gereken mühür |
 |---|---|
-| 🔥 Ateş | 💧 Su — **Gyan** (baş + işaret) |
-| 🌪 Hava | 🔥 Ateş — **Surya** (baş + yüzük) |
-| ⚡ Yıldırım | 🌪 Hava — **Abhaya** (açık avuç) |
-| 🪨 Toprak | ⚡ Yıldırım — **Tarjani** (işaret) |
-| 💧 Su | 🪨 Toprak — **Shuni** (baş + orta) |
+| 🔥 Ateş | 💧 Su — 🤟 üç parmak |
+| 🌪 Hava | 🔥 Ateş — 👌 baş parmak + işaret |
+| ⚡ Yıldırım | 🌪 Hava — 🖐 açık avuç |
+| 🪨 Toprak | ⚡ Yıldırım — 🤙 baş parmak + serçe |
+| 💧 Su | 🪨 Toprak — 🤘 işaret + serçe |
 
 Bu seçimin büyük avantajı: tanınması gereken jest sayısı **10 değil 5**. Aynı mühür
 bağlama göre saldırı ya da savunma okunur — havada sana gelen bir mermi varsa savunma,
