@@ -90,7 +90,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v7.1 · kar + doku · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v7.2 · arena düzeni · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -157,7 +157,10 @@ const TEMALAR={
     zemin:0x7f95c0, karA:0x6a7ea6, karB:0x8ea3c9,
     /* duvar = kar seti; koyu olunca ufku kesen bir çit gibi duruyordu.
        engel/silindir artık kaya ve buz: siyah leke değil, kar altında hacim. */
-    duvar:0x8098c0, engelA:0x63769e, engelB:0x4e5f83, silindir:0x93aad4,
+    /* Referansta zemin karenin EN AÇIK değeri, kaya belirgin biçimde koyu —
+       koşulacak yer bir bakışta okunuyor. Bizde ikisi birbirine yakındı ve
+       arena okunmuyordu; kaya tonları aşağı çekildi. */
+    duvar:0x8098c0, engelA:0x4a5a80, engelB:0x3a4868, silindir:0x93aad4,
     dag:[0x46527a,0x333e63,0x232c4c],
     camGovde:0x191d30, camA:0x1b2b40, camB:0x131f31, camKar:0x8ea4c8,
     kayaA:0x63769e, kayaB:0x4e5f83, karTane:[0.86,0.92,1.0],
@@ -185,7 +188,7 @@ const statusEl=document.getElementById('status'), scoreEl=document.getElementByI
 const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById('hpLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v7.1 · kar + doku · motor hazır ✓';
+document.getElementById('subLine').textContent='v7.2 · arena düzeni · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -908,6 +911,49 @@ function kayaGeo(seed,puruz){
   }
   return mesh(p,n,ix);
 }
+/* --- YAYLA: düz tepeli, kademeli kaya bloğu ---------------------------------
+   Referans haritanın tüm engelleri TEK biçim dilinin farklı ölçekleri: düz
+   tepeli, kenarları basamaklı yayla. Yuvarlak blob'lar rastgele duruyordu;
+   tekrarlanan bir motif "yer" hissi veriyor. Düz tepe kar birikimiyle de
+   birebir uyuşuyor — n.y=1 olan yüzey en çok karı tutuyor, yani her bloğun
+   üstü beyaz sahanlık, yanları kaya oluyor. Referanstaki değer yapısı bu. */
+function yaylaGeo(seed,kenar,kademe){
+  let s=seed>>>0; const rnd=()=>((s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff);
+  const p=[],n=[],ix=[];
+  const R=[]; for(let j=0;j<kenar;j++) R.push(0.36+rnd()*0.15);   /* düzensiz çokgen */
+  const yuz=(vs)=>{
+    const a=vs[0],b=vs[1],c=vs[2];
+    const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2];
+    const vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+    let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+    const l=Math.hypot(nx,ny,nz)||1;
+    const b0=p.length/3;
+    vs.forEach(v=>{p.push(v[0],v[1],v[2]);n.push(nx/l,ny/l,nz/l);});
+    for(let t=1;t<vs.length-1;t++) ix.push(b0,b0+t,b0+t+1);
+  };
+  const P=(j,ss,xx,zz)=>{const a=j/kenar*6.283185;
+    return [Math.cos(a)*R[j]*ss+xx, Math.sin(a)*R[j]*ss+zz];};
+  let y=0, sc=1, ox=0, oz=0;
+  for(let k=0;k<kademe;k++){
+    const h=(1/kademe)*(1.18-k*0.14);
+    const scU=sc*(0.84-rnd()*0.12);
+    const nox=ox+(rnd()-0.5)*0.09, noz=oz+(rnd()-0.5)*0.09;   /* kademe kayması */
+    for(let j=0;j<kenar;j++){
+      const j2=(j+1)%kenar;
+      const a=P(j,sc,ox,oz),  b=P(j2,sc,ox,oz);
+      const c=P(j2,scU,nox,noz), d=P(j,scU,nox,noz);
+      /* sıra a→d→c→b: dışa bakan normal. a→b→c→d içe bakıyor. */
+      yuz([[a[0],y,a[1]],[d[0],y+h,d[1]],[c[0],y+h,c[1]],[b[0],y,b[1]]]);
+    }
+    /* Her kademenin kendi üst kapağı var — görünen sahanlıkları o yapıyor.
+       Ters sırada: açı yönünde saymak -y normal veriyor. */
+    const kapak=[];
+    for(let j=kenar-1;j>=0;j--){const v=P(j,scU,nox,noz);kapak.push([v[0],y+h,v[1]]);}
+    yuz(kapak);
+    y+=h; sc=scU; ox=nox; oz=noz;
+  }
+  return mesh(p,n,ix);
+}
 /* --- KAR ZEMİNİ: arena düz, dışarısı tümsekli --------------------------------
    Tek düz kutu + ızgara çizgisi prototip görüntüsü veriyordu. Arena içi
    OYNANIŞ İÇİN düz kalmak zorunda (gölgeler ve siper yüksekliği y=0 varsayıyor),
@@ -972,6 +1018,10 @@ const GEO={box:boxGeo(),sph:sphereGeo(11,15),cone:coneGeo(12),cyl:cylGeo(12),dis
   /* Pürüz yüksek: kaba oktav komşularıyla yumuşatıldığı için genliğin bir
      kısmını kaybediyor. Düşük değerlerde hepsi aynı yuvarlak somuna dönüyordu. */
   kaya:[kayaGeo(0x51f3,1.05),kayaGeo(0x9ac1,1.25),kayaGeo(0x2e77,0.90),kayaGeo(0xbb40,1.15)],
+  /* tek kademe = alçak sahanlık, üç kademe = basamaklı kule */
+  yayla:[yaylaGeo(0x1a3f,6,1),yaylaGeo(0x77b2,7,1),
+         yaylaGeo(0x4d09,6,2),yaylaGeo(0xc351,7,2),
+         yaylaGeo(0x8e6a,5,3),yaylaGeo(0x2fd4,6,3)],
   zemin:karZeminGeo(ZEMIN_YARI,74),
   sirt:[sirtGeo(0xa17,300,16,86,84,1.5),
         sirtGeo(0x5c3,205,11,54,72,1.7),
@@ -1057,30 +1107,41 @@ let camYaw=0,camX=0,camY=4.6,camZ=-8,camFx=0,camFy=0,camFz=1;
 
 /* engeller: {minx,maxx,minz,maxz,h,geo,model,color} */
 const OBS=[],STAT=[];
-let kayaSayac=0;
-function addObs(x,z,w,d,h,color,cyl,duz,gorH){
+let sekilSayac=0;
+/* tip: 'yayla' düz tepeli kademeli blok · 'kaya' yuvarlak kaya · 'buz' kule ·
+   'duz' kutu (yalnız arena seti). gorH: çizilen yükseklik ≠ çarpışma yüksekliği. */
+function addObs(x,z,w,d,h,color,tip,gorH){
   OBS.push({minx:x-w/2,maxx:x+w/2,minz:z-d/2,maxz:z+d/2,h});
-  const P=TEMA.parilti, gh=gorH||h;
-  if(duz){ STAT.push({geo:GEO.box,model:mModel(x,gh/2,z,0,w,gh,d),color,emiss:0,kar:1,parilti:P}); return; }
-  if(cyl){
-    /* buz kulesi: yukarı doğru daralan koni — silindir hiçbir şeye benzemiyordu.
-       Buz karı tutmaz ama en çok o parlar. */
-    STAT.push({geo:GEO.cone,model:mModel(x,0,z,0,w*1.15,h*1.5,d*1.15),color,emiss:0,kar:0.30,parilti:P*1.8});
-  } else {
-    /* siper kutusu yerine kar altında kaya; çarpışma kutusu aynı kalıyor.
-       kar=0.95 → üstü karlı, yanları kaya: hacmi okutan şey bu ayrım. */
-    const g=GEO.kaya[kayaSayac++%GEO.kaya.length];
-    STAT.push({geo:g,model:mModel(x,0,z,(kayaSayac*1.7)%6.283,w*1.18,h*1.12,d*1.18),color,emiss:0,kar:0.95,parilti:P});
+  const P=TEMA.parilti, gh=gorH||h, s=sekilSayac++, don=(s*2.399)%6.283185;
+  if(tip==='duz'){ STAT.push({geo:GEO.box,model:mModel(x,gh/2,z,0,w,gh,d),color,emiss:0,kar:1,parilti:P}); return; }
+  if(tip==='buz'){
+    /* buz kulesi: yukarı doğru daralan koni. Buz karı tutmaz ama en çok o parlar. */
+    STAT.push({geo:GEO.cone,model:mModel(x,0,z,0,w*1.15,gh*1.5,d*1.15),color,emiss:0,kar:0.30,parilti:P*1.8});
+    return;
   }
+  if(tip==='kaya'){
+    /* yuvarlak kaya — yaylaların arasına serpiştirilen kırık taş */
+    const g=GEO.kaya[s%GEO.kaya.length];
+    STAT.push({geo:g,model:mModel(x,0,z,don,w*1.18,gh*1.12,d*1.18),color,emiss:0,kar:0.95,parilti:P});
+    return;
+  }
+  /* yayla — varsayılan. Kademe sayısı yüksekliğe göre: alçak siper tek
+     sahanlık, sınırdaki kule üç basamak. */
+  const kad = gh<1.9?0 : gh<3.6?2 : 4;
+  const g=GEO.yayla[kad+(s%2)];
+  /* 1.9 çarpanı blokları oyuncuya göre devasa yapıyordu (6 birim genişlik,
+     oyuncu ~1). Yayla çokgeninin yarıçapı zaten ~0.4, 1.35 ile genişlik
+     çarpışma kutusuna oturuyor. */
+  STAT.push({geo:g,model:mModel(x,0,z,don,w*1.35,gh,d*1.35),color,emiss:0,kar:0.95,parilti:P});
 }
 /* Arena sınırı: 2.6'lık duvar ufku boydan boya kesen bir çit gibi duruyordu.
    Çarpışma kutusu aynı yükseklikte kalıyor (mermi siperi hâlâ çalışsın), ama
    görünen kısım alçak ve geniş bir kar seti — sınırı okutuyor, manzarayı
    kesmiyor. gorH: çizilen yükseklik, h: çarpışma yüksekliği. */
-addObs(0,-AR-1,AR*2+4,2.6,2.6,TEMA.duvar,false,true,0.85);
-addObs(0, AR+1,AR*2+4,2.6,2.6,TEMA.duvar,false,true,0.85);
-addObs(-AR-1,0,2.6,AR*2+4,2.6,TEMA.duvar,false,true,0.85);
-addObs( AR+1,0,2.6,AR*2+4,2.6,TEMA.duvar,false,true,0.85);
+addObs(0,-AR-1,AR*2+4,2.6,2.6,TEMA.duvar,'duz',0.85);
+addObs(0, AR+1,AR*2+4,2.6,2.6,TEMA.duvar,'duz',0.85);
+addObs(-AR-1,0,2.6,AR*2+4,2.6,TEMA.duvar,'duz',0.85);
+addObs( AR+1,0,2.6,AR*2+4,2.6,TEMA.duvar,'duz',0.85);
 /* Kar gölgesi yamaları — deterministik, zemine değer katıyor */
 const KAR=[];
 { let r=12345; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
@@ -1115,12 +1176,53 @@ const KAR=[];
                    color:TEMA.camKar,emiss:0,kar:1,parilti:TEMA.parilti});
     }
   } }
-/* siperler (deterministik yerleşim) */
-[[6,4,0],[-7,6,0],[10,-6,1],[-11,-4,0],[3,12,0],[-4,-13,1],[14,8,0],[-15,10,0],[12,-14,1],[-9,-11,0],[0,-8,0],[-2,18,1],[18,-2,0],[-19,-8,0]]
-.forEach((s,i)=>{
-  if(s[2]) addObs(s[0],s[1],1.6,1.6,2.5,TEMA.silindir,true);
-  else addObs(s[0],s[1],2.2+(i%3)*0.7,1.7+(i%2)*0.9,1.35+(i%4)*0.35,i%2?TEMA.engelA:TEMA.engelB);
-});
+/* =============================================================
+   SİPER YERLEŞİMİ — üç kuşak
+   Eski yerleşim ölçüldüğünde referansın tam tersi çıktı: yoğunluk merkezde ve
+   ortada aynı (9.6 / 10.6 / 0.6 birim başına), yani düello alanı doluydu ve
+   sınır boştu. Boyut aralığı da 1.8×'ti, referansta ~10×.
+     merkez  r<7.5   BOŞ            → düello ve kaçış alanı, okunaklı zemin
+     orta    7.5–21  kümeler        → aralarında koşu koridorları kalıyor
+     dış     21–29   yoğun + yüksek → sınırı çit değil kaya sıklığı okutuyor
+   Kümeler açı listesiyle yerleştiriliyor; listedeki boşluklar koridor oluyor.
+   ============================================================= */
+{ let r=4242; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
+  const renk=()=>rnd()<0.5?TEMA.engelA:TEMA.engelB;
+  /* --- orta kuşak: 6 küme, aralarında geçit ---
+     Küme başına 2 parça: 7×(2-3) denendiğinde orta kuşak yoğunluğu 20.7 çıktı,
+     eski oynanabilir düzenin (10.6) iki katı — mermi hiç geçmiyordu. 13 civarı
+     hem siperi anlamlı bırakıyor hem düelloyu boğmuyor. */
+  for(const a0 of [0.30,1.24,2.16,3.05,4.02,5.10]){
+    const adet=2;
+    const d0=9.5+rnd()*8;
+    for(let i=0;i<adet;i++){
+      const a=a0+(rnd()-0.5)*0.44, d=d0+(rnd()-0.5)*5.5;
+      const x=Math.cos(a)*d, z=Math.sin(a)*d;
+      const w=1.6+rnd()*1.9, h=1.0+rnd()*1.5;
+      addObs(x,z,w,w*(0.74+rnd()*0.46),h,renk(),'yayla');
+    }
+    /* kümeye eşlik eden alçak kırık taş — ölçek çıpası */
+    if(rnd()<0.6){
+      const a=a0+(rnd()-0.5)*0.7, d=d0+(rnd()-0.5)*7;
+      addObs(Math.cos(a)*d,Math.sin(a)*d,1.0+rnd()*0.8,1.0+rnd()*0.7,0.55+rnd()*0.4,renk(),'kaya');
+    }
+  }
+  /* --- dış kuşak: yoğun ve yüksek; sınır burada okunuyor --- */
+  for(let i=0;i<26;i++){
+    const a=i/26*6.283185+(rnd()-0.5)*0.16;
+    /* iki geçit bırak: oyuncu kenara sıkışıp kalmasın */
+    const gecit=Math.min(Math.abs(a-1.45),Math.abs(a-4.6));
+    if(gecit<0.20) continue;
+    const d=21.5+rnd()*6.5;
+    const x=Math.cos(a)*d, z=Math.sin(a)*d;
+    const h=2.6+rnd()*4.6;                     /* alçak siperin ~5 katına kadar */
+    const w=2.0+rnd()*2.2;
+    addObs(x,z,w,w*(0.78+rnd()*0.4),h,renk(),'yayla');
+  }
+  /* --- buz kuleleri: üçü dışta işaret taşı, biri ortada dönüm noktası --- */
+  for(const[a,d]of [[0.75,24],[2.55,25.5],[4.05,23],[5.6,25],[1.45,13.5]])
+    addObs(Math.cos(a)*d,Math.sin(a)*d,1.5,1.5,2.4+rnd()*1.6,TEMA.silindir,'buz');
+}
 /* Kar gölge yamaları da statik — kaynağa dahil (26 çağrı daha eksilir) */
 for(const y of KAR)
   STAT.push({geo:GEO.disc,model:mModel(y[0],0.028,y[1],y[3],y[2],1,y[2]*0.72),
