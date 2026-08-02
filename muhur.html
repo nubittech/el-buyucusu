@@ -279,8 +279,12 @@ function hataGoster(baslik,e){
 }
 const zamanAsimi=(p,ms,ad)=>Promise.race([p,
   new Promise((_,rej)=>setTimeout(()=>rej(new Error(ad+' '+ms+' ms içinde yanıt vermedi')),ms))]);
-const MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-const CDN='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+/* MediaPipe YEREL. CDN'e bağlı kalırsa oyun çevrimdışı açılmaz ve ilk açılışta
+   ~26 MB indirmek zorunda kalır — App Store incelemesinde de "internetsiz
+   çalışmıyor" diye takılır. wasm klasöründe hem SIMD hem SIMD'siz sürüm var;
+   FilesetResolver cihaz yeteneğine göre seçiyor, böylece eski iOS de çalışıyor. */
+const MODEL='mediapipe/hand_landmarker.task';
+const CDN='mediapipe';
 
 async function init(){
   startBtn.style.display='none';errEl.textContent='';
@@ -302,7 +306,7 @@ async function init(){
 
   durum('motor indiriliyor…');
   let FilesetResolver,HandLandmarker;
-  try{ ({FilesetResolver,HandLandmarker}=await zamanAsimi(import(CDN+'/+esm'),20000,'CDN indirmesi')); }
+  try{ ({FilesetResolver,HandLandmarker}=await zamanAsimi(import('./mediapipe/vision_bundle.mjs'),20000,'motor dosyası')); }
   catch(e){ hataGoster('Motor indirilemedi',e);return; }
 
   durum('wasm yükleniyor…');

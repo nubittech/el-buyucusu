@@ -451,12 +451,12 @@ async function initCamera(){
   const stream=await navigator.mediaDevices.getUserMedia({
     video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
   video.srcObject=stream;await video.play();
-  const {FilesetResolver,HandLandmarker}=
-    await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm');
-  const vision=await FilesetResolver.forVisionTasks(
-    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
-  const opts=d=>({baseOptions:{modelAssetPath:
-    'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+  /* MediaPipe YEREL — çevrimdışı çalışsın ve ilk açılış hızlı olsun diye.
+     wasm klasöründe SIMD ve SIMD'siz iki sürüm var; FilesetResolver cihaza
+     göre seçiyor, böylece eski iOS sürümleri de destekleniyor. */
+  const {FilesetResolver,HandLandmarker}=await import('./mediapipe/vision_bundle.mjs');
+  const vision=await FilesetResolver.forVisionTasks('mediapipe/wasm');
+  const opts=d=>({baseOptions:{modelAssetPath:'mediapipe/hand_landmarker.task',
     delegate:d},runningMode:'VIDEO',numHands:1});
   try{ landmarker=await HandLandmarker.createFromOptions(vision,opts('GPU')); }
   catch(e){ landmarker=await HandLandmarker.createFromOptions(vision,opts('CPU')); }
