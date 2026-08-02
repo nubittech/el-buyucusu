@@ -134,7 +134,7 @@ const TEMALAR={
   gunduz:{
     gok:[0.83,0.88,0.95], sisMenzil:[26,86],
     isik:[1.04,0.98,0.88], golge:[0.58,0.68,0.90],
-    gunes:[0.55,0.62,0.48],
+    gunes:[0.55,0.62,0.48], bloomEsik:0.86, bloomGuc:0.45,
     zemin:0xdfe7f1, karA:0xbccbe4, karB:0xd2dcec, izgara:0x93a8c8, izgaraA:0.18,
     duvar:0xaebacd, engelA:0xaebedb, engelB:0x93a4c2, silindir:0x8d9db9,
     agacA:0x6b7590, agacB:0x59637d,
@@ -144,7 +144,7 @@ const TEMALAR={
        Sıcak-soğuk ayrımı gündüzden daha keskin: ay soluk-sıcak, gölge derin mor. */
     gok:[0.11,0.14,0.26], sisMenzil:[22,72],
     isik:[1.00,0.96,0.86], golge:[0.26,0.34,0.62],
-    gunes:[0.42,0.70,0.40],
+    gunes:[0.42,0.70,0.40], bloomEsik:0.80, bloomGuc:0.60,
     zemin:0x8fa6cc, karA:0x7185ad, karB:0x9db2d6, izgara:0x5d719c, izgaraA:0.22,
     duvar:0x2f3a5c, engelA:0x4a5a86, engelB:0x3c4a71, silindir:0x36436a,
     agacA:0x1e2740, agacB:0x161d33,
@@ -179,6 +179,7 @@ function resize(){
   W=innerWidth;H=innerHeight;
   glc.width=W*DPR; glc.height=H*DPR; GL.viewport(0,0,glc.width,glc.height);
   ov.width=W*DPR; ov.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  if(glc.width>0&&glc.height>0) postKur(glc.width,glc.height);
 }
 addEventListener('resize',resize);
 pip.width=184; pip.height=244;
@@ -329,6 +330,150 @@ GL.uniform3f(U.uCool,...TEMA.golge);  /* gölge tonu — karartma değil renk ka
   GL.activeTexture(GL.TEXTURE0);GL.bindTexture(GL.TEXTURE_2D,tex);
   GL.uniform1i(U.uFirca,0);
   GL.uniform2f(U.uFircaOlcek,0.42,0.095);   /* ince darbe · kaba leke */
+}
+
+/* =============================================================
+   BLOOM — sonradan işleme
+   Sahne doğrudan ekrana değil bir dokuya çiziliyor; parlak pikseller ayıklanıp
+   çeyrek çözünürlükte ayrık gauss ile bulanıklaştırılıyor ve sahnenin üstüne
+   ekleniyor. Referans görsellerdeki ışık taşmasının kaynağı bu; gece sahnesinde
+   etkisi gündüzdekinden çok daha büyük.
+   Çeyrek çözünürlük bilinçli: hem ucuz hem de geniş-yumuşak hale veriyor.
+   ============================================================= */
+const POST={en:0,boy:0,sahne:null,derinlik:null,pp:[null,null],ppTex:[null,null]};
+function tamEkranProg(frag){
+  const p=GL.createProgram();
+  GL.attachShader(p,sh(GL.VERTEX_SHADER,`
+attribute vec2 aQ; varying vec2 vT;
+void main(){ vT=aQ*0.5+0.5; gl_Position=vec4(aQ,0.0,1.0); }`));
+  GL.attachShader(p,sh(GL.FRAGMENT_SHADER,frag));
+  GL.linkProgram(p);
+  if(!GL.getProgramParameter(p,GL.LINK_STATUS)) throw new Error(GL.getProgramInfoLog(p));
+  return p;
+}
+const QUAD=GL.createBuffer();
+GL.bindBuffer(GL.ARRAY_BUFFER,QUAD);
+GL.bufferData(GL.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),GL.STATIC_DRAW);
+
+const progParlak=tamEkranProg(`
+precision mediump float; varying vec2 vT;
+uniform sampler2D uTex; uniform float uEsik, uYumusak;
+void main(){
+  vec3 c=texture2D(uTex,vT).rgb;
+  /* Parlaklık (luminance) yerine KANAL MAKSİMUMU. Ateşin turuncusu doygun ama
+     parlaklığı düşük — luminance eşiğinde hiç parlamıyordu; kar ise tersi,
+     doygunluğu yok ama parlak, eşiği geçip tüm zemini patlatıyordu.
+     Maksimum kanal ikisini de doğru sıralıyor. */
+  float m=max(max(c.r,c.g),c.b);
+  float k=smoothstep(uEsik,uEsik+uYumusak,m);
+  gl_FragColor=vec4(c*k,1.0);   /* c ile çarpım rengi korur, beyaza patlamaz */
+}`);
+const progBulanik=tamEkranProg(`
+precision mediump float; varying vec2 vT;
+uniform sampler2D uTex; uniform vec2 uYon;
+void main(){
+  /* 9 örnekli gauss, doğrusal filtreleme ile 5 dokunuşa indirgenmiş */
+  vec3 c=texture2D(uTex,vT).rgb*0.2270270270;
+  c+=texture2D(uTex,vT+uYon*1.3846153846).rgb*0.3162162162;
+  c+=texture2D(uTex,vT-uYon*1.3846153846).rgb*0.3162162162;
+  c+=texture2D(uTex,vT+uYon*3.2307692308).rgb*0.0702702703;
+  c+=texture2D(uTex,vT-uYon*3.2307692308).rgb*0.0702702703;
+  gl_FragColor=vec4(c,1.0);
+}`);
+const progBirlestir=tamEkranProg(`
+precision mediump float; varying vec2 vT;
+uniform sampler2D uSahne, uHale; uniform float uGuc;
+void main(){
+  vec3 s=texture2D(uSahne,vT).rgb;
+  vec3 h=texture2D(uHale,vT).rgb;
+  /* ekleyerek birleştir; hale zaten eşiklenmiş olduğu için karanlığı kirletmez */
+  gl_FragColor=vec4(s+h*uGuc,1.0);
+}`);
+function dokuYap(en,boy){
+  const t=GL.createTexture();
+  GL.bindTexture(GL.TEXTURE_2D,t);
+  GL.texImage2D(GL.TEXTURE_2D,0,GL.RGBA,en,boy,0,GL.RGBA,GL.UNSIGNED_BYTE,null);
+  /* NPOT doku: WebGL1'de yalnız CLAMP + LINEAR ile çalışır, mipmap olmaz */
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_WRAP_S,GL.CLAMP_TO_EDGE);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_WRAP_T,GL.CLAMP_TO_EDGE);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MIN_FILTER,GL.LINEAR);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MAG_FILTER,GL.LINEAR);
+  return t;
+}
+function fboYap(tex,derinlikGerek,en,boy){
+  const f=GL.createFramebuffer();
+  GL.bindFramebuffer(GL.FRAMEBUFFER,f);
+  GL.framebufferTexture2D(GL.FRAMEBUFFER,GL.COLOR_ATTACHMENT0,GL.TEXTURE_2D,tex,0);
+  let rb=null;
+  if(derinlikGerek){
+    rb=GL.createRenderbuffer();
+    GL.bindRenderbuffer(GL.RENDERBUFFER,rb);
+    GL.renderbufferStorage(GL.RENDERBUFFER,GL.DEPTH_COMPONENT16,en,boy);
+    GL.framebufferRenderbuffer(GL.FRAMEBUFFER,GL.DEPTH_ATTACHMENT,GL.RENDERBUFFER,rb);
+  }
+  GL.bindFramebuffer(GL.FRAMEBUFFER,null);
+  return {f,rb};
+}
+function postKur(en,boy){
+  if(POST.en===en&&POST.boy===boy) return;
+  POST.en=en;POST.boy=boy;
+  const ke=Math.max(1,en>>2), kb=Math.max(1,boy>>2);   /* çeyrek çözünürlük */
+  POST.sahneTex=dokuYap(en,boy);
+  const a=fboYap(POST.sahneTex,true,en,boy);
+  POST.sahne=a.f;POST.derinlik=a.rb;
+  for(let i=0;i<2;i++){
+    POST.ppTex[i]=dokuYap(ke,kb);
+    POST.pp[i]=fboYap(POST.ppTex[i],false,ke,kb).f;
+  }
+  POST.ke=ke;POST.kb=kb;
+}
+function tamEkranCiz(){
+  GL.bindBuffer(GL.ARRAY_BUFFER,QUAD);
+  const loc=GL.getAttribLocation(GL.getParameter(GL.CURRENT_PROGRAM),'aQ');
+  GL.enableVertexAttribArray(loc);
+  GL.vertexAttribPointer(loc,2,GL.FLOAT,false,0,0);
+  GL.drawArrays(GL.TRIANGLES,0,3);
+}
+function bloomUygula(){
+  GL.disable(GL.DEPTH_TEST);GL.disable(GL.BLEND);
+  /* 1) parlak geçişi — sahneden çeyrek boya */
+  GL.bindFramebuffer(GL.FRAMEBUFFER,POST.pp[0]);
+  GL.viewport(0,0,POST.ke,POST.kb);
+  GL.useProgram(progParlak);
+  GL.activeTexture(GL.TEXTURE1);GL.bindTexture(GL.TEXTURE_2D,POST.sahneTex);
+  GL.uniform1i(GL.getUniformLocation(progParlak,'uTex'),1);
+  GL.uniform1f(GL.getUniformLocation(progParlak,'uEsik'),TEMA.bloomEsik);
+  GL.uniform1f(GL.getUniformLocation(progParlak,'uYumusak'),0.22);
+  tamEkranCiz();
+  /* 2) ayrık gauss, iki tur (yatay+dikey ×2) → geniş yumuşak hale */
+  GL.useProgram(progBulanik);
+  const uT=GL.getUniformLocation(progBulanik,'uTex'), uY=GL.getUniformLocation(progBulanik,'uYon');
+  GL.uniform1i(uT,1);
+  let kaynak=0;
+  for(let tur=0;tur<2;tur++){
+    for(const yatay of [true,false]){
+      GL.bindFramebuffer(GL.FRAMEBUFFER,POST.pp[1-kaynak]);
+      GL.viewport(0,0,POST.ke,POST.kb);
+      GL.activeTexture(GL.TEXTURE1);GL.bindTexture(GL.TEXTURE_2D,POST.ppTex[kaynak]);
+      GL.uniform2f(uY, yatay?1/POST.ke:0, yatay?0:1/POST.kb);
+      tamEkranCiz();
+      kaynak=1-kaynak;
+    }
+  }
+  /* 3) ekrana birleştir */
+  GL.bindFramebuffer(GL.FRAMEBUFFER,null);
+  GL.viewport(0,0,POST.en,POST.boy);
+  GL.useProgram(progBirlestir);
+  GL.activeTexture(GL.TEXTURE1);GL.bindTexture(GL.TEXTURE_2D,POST.sahneTex);
+  GL.uniform1i(GL.getUniformLocation(progBirlestir,'uSahne'),1);
+  GL.activeTexture(GL.TEXTURE2);GL.bindTexture(GL.TEXTURE_2D,POST.ppTex[kaynak]);
+  GL.uniform1i(GL.getUniformLocation(progBirlestir,'uHale'),2);
+  GL.uniform1f(GL.getUniformLocation(progBirlestir,'uGuc'),TEMA.bloomGuc);
+  tamEkranCiz();
+  /* ana programa dön — fırça dokusu 0. birimde kalmalı */
+  GL.useProgram(prog);
+  GL.activeTexture(GL.TEXTURE0);
+  GL.enable(GL.DEPTH_TEST);
 }
 
 /* --- geometri üreticileri --- */
@@ -1081,6 +1226,8 @@ function drawEnemies(now){
    ÇİZİM
    ============================================================= */
 function render(now){
+  /* Sahne doğrudan ekrana değil, bloom için dokuya çiziliyor. */
+  if(POST.sahne){ GL.bindFramebuffer(GL.FRAMEBUFFER,POST.sahne); GL.viewport(0,0,POST.en,POST.boy); }
   GL.clearColor(TEMA.gok[0],TEMA.gok[1],TEMA.gok[2],1);
   GL.clear(GL.COLOR_BUFFER_BIT|GL.DEPTH_BUFFER_BIT);
   GL.uniformMatrix4fv(U.uPr,false,mPersp(FOV,W/H,0.1,120));
@@ -1134,6 +1281,7 @@ function render(now){
     draw(GEO.sph,mModel(f.x,f.y,f.z,0,sc,sc,sc),f.color,1,(1-t)*0.85);
   }
   GL.depthMask(true);GL.disable(GL.BLEND);
+  if(POST.sahne) bloomUygula();       /* dokudaki sahneyi haleyle birlikte ekrana bas */
 }
 /* dünya noktası → ekran pikseli (2B kaplama için). Kamera tabanı render ile aynı. */
 function dunyaEkran(x,y,z){
