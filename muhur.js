@@ -18,7 +18,7 @@ const POSES=[
   {id:'water',el:'💧', ad:'Su',       jest:'işaret + orta + yüzük'},
   {id:'bolt', el:'⚡', ad:'Yıldırım', jest:'baş parmak + serçe'},
   {id:'earth',el:'🪨', ad:'Toprak',   jest:'işaret + serçe'},
-  {id:'gun',  el:'👉', ad:'Silah',    jest:'işaret + orta, baş parmak dik'},
+  {id:'gun',  el:'👉', ad:'Silah',    jest:'işaret + orta (baş parmak serbest)'},
 ];
 const BY={};for(const p of POSES)BY[p.id]=p;
 
@@ -32,11 +32,18 @@ const PROTO0={
  water:[1.3181,1.3382,1.3196,0.7397,1.1498,1.2939,1.3512,0.7924,0.8737],
  bolt:[0.6714,0.6456,0.6692,1.2601,0.5522,0.8421,1.125,1.8818,1.4602],
  earth:[1.3181,0.6456,0.6692,1.2601,1.1498,0.2489,0.5311,1.3819,0.8737],
- gun:[1.3181,1.3382,0.6692,0.7397,0.8572,1.3062,1.242,1.5002,1.543]};
+ gun:[1.3181,1.3382,0.6692,0.7397,0.8995,1.2549,1.0027,1.262,1.3132]};
 
 /* açıklık sinyali en güvenilir → ağırlıklı. 5. terim baş–işaret teması:
    Ateş↔Hava tek zayıf çift olduğu için ağırlığı yüksek tutuldu. */
 const W=[1.6,1.6,1.6,1.6,1.5,1,1,1,1.3];
+/* SİLAH için ayrı ağırlık. Silahın açıklık deseni (işaret+orta) altı poz içinde
+   benzersiz; baş parmağın yeri ise kişiden kişiye ve atıştan atışa değişiyor,
+   yani silah için ayırt edici değil, gürültü. Ölçümde eşit ağırlıkla silah
+   yönelim+baş parmak taramasında yalnız %54.8 tanınıyordu; baş parmak terimleri
+   kısılınca %100'e çıktı. */
+const W_GUN=[1.9,1.9,1.9,1.9,0.3,0.3,0.3,0.3,0.3];
+const AGIRLIK=id=>id==='gun'?W_GUN:W;
 /* Eşikler gerçekçi varyasyon altında ayarlandı; taramada mesafe eşiği neredeyse
    etkisiz çıktı, ayrımı oran yapıyor. */
 const RED_MESAFE=1.8, RED_ORAN=1.30;
@@ -70,12 +77,12 @@ function feat(lm){
     d2v(lm[4],lm[8])/pw,d2v(lm[4],lm[12])/pw,d2v(lm[4],lm[16])/pw,d2v(lm[4],lm[20])/pw,
     d2v(lm[4],lm[17])/pw];
 }
-const uzaklik=(a,b)=>{let s=0;for(let k=0;k<9;k++){const d=(a[k]-b[k])*W[k];s+=d*d;}return Math.sqrt(s);};
+const uzaklik=(a,b,w)=>{const q=w||W;let s=0;for(let k=0;k<9;k++){const d=(a[k]-b[k])*q[k];s+=d*d;}return Math.sqrt(s);};
 
 /* en yakın prototip + belirsizlik reddi:
    yanlış mühür atmaktansa hiç atmamak yeğdir */
 function siniflandir(f){
-  const ds=POSES.map(p=>({id:p.id,d:uzaklik(f,PROTO[p.id])})).sort((a,b)=>a.d-b.d);
+  const ds=POSES.map(p=>({id:p.id,d:uzaklik(f,PROTO[p.id],AGIRLIK(p.id))})).sort((a,b)=>a.d-b.d);
   const red = ds[0].d>RED_MESAFE ? 'uzak'
             : (ds[1].d/(ds[0].d||1e-6))<RED_ORAN ? 'belirsiz' : null;
   return {ds,id:red?null:ds[0].id,red};
@@ -97,6 +104,8 @@ const ELEM={
 
 /* --- beceri tablosu: liste değil, döngüden türetiliyor --- */
 const TEMEL={fire:'Alev Oku',air:'Rüzgar Bıçağı',water:'Su Kırbacı',bolt:'Şimşek Ucu',earth:'Taş Mermisi'};
+/* NOT: Ardışık aynı mühür bastırıldığı için (bkz. dizi motoru) bu kademeye şu an
+   ULAŞILAMIYOR. Beceriler duruyor; ileride boştaki 10 nötr çifte taşınabilir. */
 const GUCLU={fire:'Ejder Nefesi',air:'Kasırga',water:'Sel Dalgası',bolt:'Gök Mızrağı',earth:'Taş Duvar'};
 const BESLI={fire:'Alev Fırtınası',air:'Fırtına Sarmalı',bolt:'Şarapnel Yıldırımı',earth:'Taş Seli',water:'Kaynar Dalga'};
 const FUZYON={fire:'Buhar Perdesi',air:'Kor Girdabı',bolt:'İyon Alanı',earth:'Sarsıntı',water:'Bataklık'};
@@ -159,7 +168,11 @@ function guncelle(D,id,dt,now){
   if(!D.kilitMs) D.aday=null;
 
   const onayli=(D.aday&&D.kilitMs>=KILIT_MS)?D.aday:null;
-  if(onayli&&onayli!==D.onayli){                 /* yalnız YENİ onayda tetikle */
+  /* Beceri yüklenirken dizi KİLİTLİ: el doğal olarak silah pozundan çıkarken
+     araya giren bir mühür yüklemeyi iptal ediyordu. Yükleme bir kez başladıysa
+     bitecek — açıkta geçen o süre zaten riskin kendisi. */
+  const yukleniyor = D.beceri && D.yukMs < D.yukTotal;
+  if(onayli&&onayli!==D.onayli&&!yukleniyor){    /* yalnız YENİ onayda tetikle */
     if(onayli==='gun'){
       if(D.dizi.length){
         const b=beceriBul(D.dizi);
@@ -173,6 +186,12 @@ function guncelle(D,id,dt,now){
       diziSifirla(D);D.beceri=null;D.yukMs=0;D.cezaUntil=now+CEZA_MS;
       D.son='dizi en fazla 3 mühür';
       olaylar.push({tip:'basarisiz',sebep:D.son});
+    } else if(D.dizi.length&&D.dizi[D.dizi.length-1]===onayli){
+      /* Aynı mührün ardışık tekrarı YOK. El sabit dururken tanıma bir an
+         kesilip yeniden kilitlenince aynı mühür ikinci kez ekleniyordu; dizi
+         🔥🔥🔥 olup hiçbir beceriye karşılık gelmiyor, 👉 de "eşleşme yok"
+         veriyordu. Tekrar bastırılıyor, süre de tazeleniyor. */
+      D.sonMuhur=now;
     } else {
       D.dizi.push(onayli);D.sonMuhur=now;D.beceri=null;D.yukMs=0;D.son=null;
       olaylar.push({tip:'muhur',id:onayli});
@@ -180,7 +199,10 @@ function guncelle(D,id,dt,now){
   }
   D.onayli=onayli;
 
-  if(D.dizi.length&&now-D.sonMuhur>DIZI_MS){
+  /* Zaman aşımı mühürler ARASI tereddüt içindir, pozu tutma süresi için değil:
+     bir mührü uzun tutmak diziyi düşürmemeli. Onaylı poz varken sayaç tazelenir. */
+  if(onayli) D.sonMuhur=now;
+  else if(D.dizi.length&&now-D.sonMuhur>DIZI_MS){
     diziSifirla(D);D.son='dizi zaman aşımına uğradı';
     olaylar.push({tip:'zamanAsimi'});
   }

@@ -27,6 +27,7 @@ canvas{touch-action:none}
 #seqStrip .c{font-size:24px;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;
  background:rgba(12,6,34,.72);border:1px solid rgba(255,255,255,.2)}
 #seqStrip .c.g{opacity:.35}
+#seqStrip .c.now{background:none;border-style:dashed;opacity:.75;margin-right:4px}
 #lockPip{width:104px;height:5px;background:rgba(255,255,255,.16);border-radius:99px;overflow:hidden;margin-top:2px}
 #lockPip i{display:block;height:100%;width:0;border-radius:99px;background:#37d6ff}
 #lockPip.rdy i{background:#ffb347}
@@ -82,7 +83,7 @@ canvas{touch-action:none}
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
-    👉 <b>Silah</b> mührü diziyi kapatır → beceri yüklenir → ateşlenir<br>
+    👉 <b>Silah</b> (işaret+orta) diziyi kapatır → beceri yüklenir → ateşlenir<br>
     ⚔️ <b>Havada çarpışma:</b> döngüde üstün olan deler — 🔥→🌪→⚡→🪨→💧→🔥<br>
     🧱 <b>Siper:</b> delip geçen mermi seni kovalar, tek kaçış engellerin arkası<br>
     🕹️ <b>Sağ başparmak:</b> sağ yarıda sürükle → manevra
@@ -99,7 +100,7 @@ canvas{touch-action:none}
   <button class="bigbtn" id="retryBtn">Tekrar Dene</button>
 </div>
 
-<script src="muhur.js"></script>
+<script src="muhur.js?v=7"></script>
 <script>
 'use strict';
 /* =============================================================
@@ -531,7 +532,9 @@ function ates(beceri){
   D.beceri=null;D.yukMs=0;D.son=null;
 }
 function cizMuhur(){
-  let h='';
+  /* şu an okunan poz en solda, sönük: elin ne verdiğini anlık görebilesin */
+  const a=D.aday?MU.BY[D.aday].el:'·';
+  let h=`<div class="c now">${a}</div>`;
   for(const id of D.dizi) h+=`<div class="c">${MU.BY[id].el}</div>`;
   if(D.dizi.length) h+='<div class="c g">👉</div>';
   if(seqStripEl.innerHTML!==h) seqStripEl.innerHTML=h;

@@ -145,17 +145,25 @@ const SEN=[
     r=>r.olaylar.some(o=>o.tip==='zamanAsimi')],
   ['tutarken tek kare kaybı mührü bölmez', [F('fire',120),[null,1],F('fire',120),F(null,300)],
     r=>r.olaylar.filter(o=>o.tip==='muhur').length===1],
-  /* aynı mührü tekrarlamak için pozu bırakmak gerekir: onaylandıktan sonra
-     kilit KILIT_MS+120'de doyar, tekrar onay için eşiğin altına inmeli (~75 ms) */
-  ['🔥🔥 👉 → Ejder Nefesi (aynı mühür ×2)',
-    [F('fire',250),F(null,150),F('fire',250),F(null,150),F('gun',250),F(null,900)],
-    r=>r.olaylar.some(o=>o.tip==='yuklendi'&&o.beceri.ad==='Ejder Nefesi')],
-  ['aynı mühür 40 ms boşlukla tekrarlanmaz',
-    [F('fire',250),F(null,40),F('fire',250),F(null,100)],
+  /* ARDIŞIK AYNI MÜHÜR BASTIRILIR: el sabit dururken tanıma bir an kesilip
+     yeniden kilitlenince dizi 🔥🔥🔥 oluyordu ve hiçbir beceriye karşılık
+     gelmediği için 👉 ateş ettirmiyordu. */
+  ['🔥 → bırak → 🔥 tek mühür sayılır',
+    [F('fire',250),F(null,150),F('fire',250),F(null,150)],
     r=>r.olaylar.filter(o=>o.tip==='muhur').length===1],
-  ['4. mühür reddedilir',
-    [F('fire',250),F(null,150),F('fire',250),F(null,150),F('fire',250),F(null,150),F('fire',250),F(null,100)],
+  ['🔥🔥👉 artık Alev Oku verir (Ejder Nefesi ulaşılamaz)',
+    [F('fire',250),F(null,150),F('fire',250),F(null,150),F('gun',250),F(null,600)],
+    r=>r.olaylar.some(o=>o.tip==='yuklendi'&&o.beceri.ad==='Alev Oku')],
+  ['🔥🌪🔥 farklı mühürler ardışık sayılır',
+    [F('fire',250),F(null,120),F('air',250),F(null,120),F('fire',250),F(null,120)],
+    r=>r.olaylar.filter(o=>o.tip==='muhur').length===3],
+  ['4. FARKLI mühür reddedilir',
+    [F('fire',250),F(null,120),F('air',250),F(null,120),F('bolt',250),F(null,120),F('water',250),F(null,100)],
     r=>r.olaylar.some(o=>o.tip==='basarisiz'&&/en fazla 3/.test(o.sebep))],
+  /* YÜKLEME KİLİDİ: yükleme başladıktan sonra araya giren mühür iptal etmemeli */
+  ['yükleme sırasındaki mühür yüklemeyi iptal etmez',
+    [F('fire',250),F(null,120),F('gun',250),F('water',300),F(null,400)],
+    r=>r.olaylar.some(o=>o.tip==='yuklendi'&&o.beceri.ad==='Alev Oku')],
 ];
 for(const [ad,adim,kontrol] of SEN){
   const r=oyna(adim); const ok=kontrol(r); if(!ok)fail++;
