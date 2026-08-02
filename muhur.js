@@ -73,6 +73,63 @@ function kalibrasyonSifirla(){
 const kalibreMi=id=>JSON.stringify(PROTO[id])!==JSON.stringify(PROTO0[id]);
 kalibrasyonYukle();
 
+/* =============================================================
+   ÖĞRENİLMİŞ KALİBRASYON
+   Tek örnekli prototip yerine, kullanıcı pozu tutarken elini gezdirir ve
+   o pozun GERÇEK dağılımı kaydedilir: özellik başına ortalama ve std sapma.
+   Sınıflandırma sigma cinsinden yapılır — her poz kendi varyansına
+   bölündüğü için mesafeler pozlar arası karşılaştırılabilir olur, ve
+   "hareket edince bozuluyor" sorunu doğrudan öğrenilen varyansa girer.
+   ============================================================= */
+const KAL2_ANAHTAR='muhurKal2';
+const KAYIT_ASGARI=40;            /* bir poz için en az bu kadar kare */
+const SD_TABAN=0.045;             /* sıfıra yakın varyans mesafeyi patlatmasın */
+const SIGMA_ESIK=2.8;             /* bundan uzaksa emin değiliz → tetikleme yok */
+const SIGMA_ORAN=1.22;            /* en yakın iki poz bu kadar ayrışmalı */
+let KAL={mu:{},sd:{},n:{}};
+function kalYukle(){ try{const s=localStorage.getItem(KAL2_ANAHTAR);if(s)KAL=JSON.parse(s);}catch(e){} }
+function kalSakla(){ try{localStorage.setItem(KAL2_ANAHTAR,JSON.stringify(KAL));}catch(e){} }
+kalYukle();
+const ogrenildiMi=id=>(KAL.n&&KAL.n[id]>=KAYIT_ASGARI)||false;
+/* Öğrenilmiş mod ancak ALTISI birden kayıtlıysa açılır: yarısı sigma, yarısı
+   ağırlıklı öklid mesafesiyle ölçülürse karşılaştırma geçersiz olur. */
+const ogrenilmisMod=()=>POSES.every(p=>ogrenildiMi(p.id));
+function kalSayim(){ return POSES.filter(p=>ogrenildiMi(p.id)).length; }
+function kalSil(){ KAL={mu:{},sd:{},n:{}}; try{localStorage.removeItem(KAL2_ANAHTAR);}catch(e){} }
+
+const ortalama=L=>L[0].map((_,k)=>L.reduce((s,f)=>s+f[k],0)/L.length);
+const sapma=(L,mu)=>mu.map((m,k)=>Math.sqrt(L.reduce((s,f)=>s+(f[k]-m)*(f[k]-m),0)/Math.max(1,L.length-1)));
+function sigmaUzaklik(f,id){
+  const mu=KAL.mu[id],sd=KAL.sd[id];
+  let s=0;
+  for(let k=0;k<9;k++){ const q=Math.max(sd[k],SD_TABAN); const d=(f[k]-mu[k])/q; s+=d*d; }
+  return Math.sqrt(s/9);
+}
+/* --- kayıt oturumu --- */
+let kayitId=null,kayitBuf=null;
+function kayitBasla(id){ kayitId=id;kayitBuf=[]; }
+function kayitOrnek(lm){ if(kayitId&&lm) kayitBuf.push(feat(lm)); return kayitBuf?kayitBuf.length:0; }
+function kayitIptal(){ kayitId=null;kayitBuf=null; }
+function kayitBitir(){
+  if(!kayitId||!kayitBuf||kayitBuf.length<KAYIT_ASGARI){
+    const r={ok:false,n:kayitBuf?kayitBuf.length:0,gerek:KAYIT_ASGARI}; kayitIptal(); return r;
+  }
+  /* aykırı ayıklama: kayıt sırasında poz bir an bozulduysa o kareler
+     ortalamayı ve varyansı şişirir, atılıyorlar */
+  let mu=ortalama(kayitBuf), sd=sapma(kayitBuf,mu);
+  const temiz=kayitBuf.filter(f=>{
+    let s=0; for(let k=0;k<9;k++){const q=Math.max(sd[k],0.03);const d=(f[k]-mu[k])/q;s+=d*d;}
+    return Math.sqrt(s/9)<2.2;
+  });
+  const kul=temiz.length>=Math.max(KAYIT_ASGARI,kayitBuf.length*0.6)?temiz:kayitBuf;
+  mu=ortalama(kul); sd=sapma(kul,mu);
+  KAL.mu[kayitId]=mu; KAL.sd[kayitId]=sd; KAL.n[kayitId]=kul.length;
+  kalSakla();
+  const r={ok:true,id:kayitId,n:kul.length,atilan:kayitBuf.length-kul.length,
+           ortalamaSapma:+(sd.reduce((a,b)=>a+b,0)/9).toFixed(3)};
+  kayitIptal(); return r;
+}
+
 /* --- özellik vektörü --- */
 const d2v=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function feat(lm){
@@ -87,10 +144,17 @@ const uzaklik=(a,b,w)=>{const q=w||W;let s=0;for(let k=0;k<9;k++){const d=(a[k]-
 /* en yakın prototip + belirsizlik reddi:
    yanlış mühür atmaktansa hiç atmamak yeğdir */
 function siniflandir(f){
+  if(ogrenilmisMod()){
+    /* sigma cinsinden: "bu kare, o pozun öğrenilmiş dağılımından kaç sapma uzakta" */
+    const ds=POSES.map(p=>({id:p.id,d:sigmaUzaklik(f,p.id)})).sort((a,b)=>a.d-b.d);
+    const red = ds[0].d>SIGMA_ESIK ? 'uzak'
+              : (ds[1].d/(ds[0].d||1e-6))<SIGMA_ORAN ? 'belirsiz' : null;
+    return {ds,id:red?null:ds[0].id,red,mod:'ogrenilmis',esik:SIGMA_ESIK,oranEsik:SIGMA_ORAN};
+  }
   const ds=POSES.map(p=>({id:p.id,d:uzaklik(f,PROTO[p.id],AGIRLIK(p.id))})).sort((a,b)=>a.d-b.d);
   const red = ds[0].d>RED_MESAFE ? 'uzak'
             : (ds[1].d/(ds[0].d||1e-6))<RED_ORAN ? 'belirsiz' : null;
-  return {ds,id:red?null:ds[0].id,red};
+  return {ds,id:red?null:ds[0].id,red,mod:'varsayilan',esik:RED_MESAFE,oranEsik:RED_ORAN};
 }
 
 /* =============================================================
@@ -242,6 +306,10 @@ global.MUHUR={
   get PROTO(){return PROTO;},
   feat,uzaklik,siniflandir,
   kalibrasyonYukle,kalibrasyonKaydet,kalibrasyonSifirla,kalibreMi,
+  KAYIT_ASGARI,SIGMA_ESIK,SIGMA_ORAN,
+  ogrenildiMi,ogrenilmisMod,kalSayim,kalSil,
+  kayitBasla,kayitOrnek,kayitBitir,kayitIptal,
+  get KAL(){return KAL;},
   YENER,YENILIR,ELEM,beceriBul,AVANTAJ,NOTR_ESIK,carpismaCoz,
   yeniDizi,guncelle,diziSifirla,
 };

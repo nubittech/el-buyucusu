@@ -90,13 +90,16 @@ a{color:#8d7bd8}
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div style="font-size:12px;color:#a99ed4">KALİBRASYON</div>
-      <button class="ghost" id="mhcalReset">Varsayılana dön</button>
+      <div style="font-size:12px;color:#a99ed4">KALİBRASYON <span id="mhcalSay" style="color:#6b6094"></span></div>
+      <button class="ghost" id="mhcalReset">Tümünü sil</button>
     </div>
+    <div id="mhcalBanner" class="hint" style="margin-bottom:10px"></div>
     <div class="hint" style="margin-bottom:10px">
-      Gömülü prototipler sentetik iskeletten üretildi — senin elin farklı olabilir.
-      Pozu yap, <b>Kaydet</b>'e bas; kendi elin ölçü olur. Tarayıcıda saklanır ve
-      <b>oyunda da geçerli olur</b>.
+      <b>Kaydet</b>'e bas, pozu <b>4 saniye koru</b> ve bu sırada elini gezdir:
+      yakınlaştır–uzaklaştır, sağa–sola çevir, hafifçe yatır. Sistem o pozun
+      <b>senin elindeki gerçek dağılımını</b> öğrenir ve yalnız buna yeterince
+      yakın olduğunda — yani emin olduğunda — tetikler.
+      Altı poz da kaydedilince öğrenilmiş mod açılır ve <b>oyunda da geçerli olur</b>.
     </div>
     <div id="mhcalList"></div>
   </div>
@@ -114,7 +117,7 @@ a{color:#8d7bd8}
 
 <video id="mhcam" playsinline muted autoplay style="position:fixed;width:2px;height:2px;opacity:0;pointer-events:none"></video>
 
-<script src="muhur.js?v=8"></script>
+<script src="muhur.js?v=10"></script>
 <script>
 'use strict';
 const M=window.MUHUR;
@@ -172,11 +175,14 @@ function cizDbg(r){
   dbgEl.innerHTML=r.ds.map((x,i)=>
     `<tr class="${i===0&&!r.red?'win':''}"><td>${M.BY[x.id].el} ${M.BY[x.id].ad}</td><td>${x.d.toFixed(3)}</td></tr>`).join('');
   const oran=r.ds[1].d/(r.ds[0].d||1e-6);
-  rejEl.innerHTML=r.red==='uzak'
-      ? `<b style="color:#ff9e9e">REDDEDİLDİ</b> — en yakın ${r.ds[0].d.toFixed(2)} > ${M.RED_MESAFE}`
+  const birim=r.mod==='ogrenilmis'?'σ':'';
+  const mod=r.mod==='ogrenilmis'?'öğrenilmiş':'varsayılan';
+  rejEl.innerHTML=(r.red==='uzak'
+      ? `<b style="color:#ff9e9e">EMİN DEĞİL</b> — en yakın ${r.ds[0].d.toFixed(2)}${birim} > ${r.esik}${birim}`
     : r.red==='belirsiz'
-      ? `<b style="color:#ffcf7a">BELİRSİZ</b> — oran ${oran.toFixed(2)} < ${M.RED_ORAN}`
-      : `ayrım oranı ${oran.toFixed(2)} (eşik ${M.RED_ORAN})`;
+      ? `<b style="color:#ffcf7a">BELİRSİZ</b> — ayrım ${oran.toFixed(2)} < ${r.oranEsik}`
+      : `ayrım ${oran.toFixed(2)} (eşik ${r.oranEsik})`)
+    +` <span style="color:#6b6094">· ${mod} mod</span>`;
 }
 const KEMIK=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[0,9],[9,10],[10,11],[11,12],
   [0,13],[13,14],[14,15],[15,16],[0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17]];
@@ -196,23 +202,64 @@ function cizEl(lm,renk){
 /* =============================================================
    KALİBRASYON
    ============================================================= */
-const calList=$('mhcalList');
+const calList=$('mhcalList'), calSay=$('mhcalSay'), calBanner=$('mhcalBanner');
+const KAYIT_SN=4;
+let kayit=null;            /* {id,bitis,btn,row} */
+
 function calCiz(){
   calList.innerHTML='';
+  const n=M.kalSayim();
+  calSay.textContent=`· ${n}/6 kayıtlı`;
+  calBanner.innerHTML = M.ogrenilmisMod()
+    ? '<b style="color:#8fe388">✓ Öğrenilmiş mod aktif</b> — tanıma artık senin kendi elinden öğrendiği dağılıma göre çalışıyor.'
+    : `<b style="color:#ffcf7a">Varsayılan mod</b> — altı pozun hepsi kaydedilince öğrenilmiş moda geçer (${n}/6).`;
   for(const p of M.POSES){
-    const ozel=M.kalibreMi(p.id);
+    const kayitli=M.ogrenildiMi(p.id);
     const row=document.createElement('div');row.className='calRow';
     row.innerHTML=`<div class="e">${p.el}</div><div class="n"><b>${p.ad}</b> <span style="color:#6b6094">${p.jest}</span></div>
-      <div class="s ${ozel?'done':''}">${ozel?'kendi elin':'varsayılan'}</div>`;
-    const b=document.createElement('button');b.textContent='Kaydet';
-    b.addEventListener('click',()=>{
-      if(!sonLm){errEl.textContent='El görünmüyor — kaydedilemedi.';return;}
-      M.kalibrasyonKaydet(p.id,sonLm);errEl.textContent='';calCiz();
-    });
+      <div class="s ${kayitli?'done':''}">${kayitli?M.KAL.n[p.id]+' örnek':'kayıtsız'}</div>`;
+    const b=document.createElement('button');
+    b.textContent=kayitli?'Yeniden':'Kaydet';
+    b.addEventListener('click',()=>kayitBaslat(p,b,row));
     row.appendChild(b);calList.appendChild(row);
   }
 }
-$('mhcalReset').addEventListener('click',()=>{M.kalibrasyonSifirla();calCiz();});
+function kayitBaslat(p,btn,row){
+  if(kayit){ kayitDurdur(true); return; }        /* aynı düğme = iptal */
+  if(!landmarker){errEl.textContent='Önce kamerayı aç.';return;}
+  errEl.textContent='';
+  M.kayitBasla(p.id);
+  kayit={id:p.id,bitis:performance.now()+KAYIT_SN*1000,btn,row};
+  row.style.background='rgba(255,180,70,.12)';
+  nowSub.textContent=`${p.el} ${p.ad} kaydediliyor — pozu koru ve elini gezdir`;
+  /* Güvenlik ağı: örnekler rAF'ta toplanıyor, sekme arkaya alınırsa rAF durur
+     ve kayıt hiç bitmez — arayüz kilitli kalırdı. Duvar saati de bitirsin. */
+  kayit.zaman=setTimeout(()=>kayitDurdur(false),KAYIT_SN*1000+600);
+}
+function kayitDurdur(iptal){
+  if(!kayit) return;
+  clearTimeout(kayit.zaman);
+  const row=kayit.row; kayit=null;
+  row.style.background='';
+  if(iptal){ M.kayitIptal(); errEl.textContent='Kayıt iptal edildi.'; }
+  else {
+    const r=M.kayitBitir();
+    errEl.textContent = r.ok ? ''
+      : `Yetersiz örnek (${r.n}/${r.gerek}) — el kadrajda görünmüyor olabilir, tekrar dene.`;
+  }
+  calCiz();
+}
+function kayitTik(now){
+  if(!kayit) return;
+  const n=M.kayitOrnek(sonLm);
+  const kalan=Math.max(0,(kayit.bitis-now)/1000);
+  kayit.btn.textContent=kalan.toFixed(1)+'s · '+n;
+  if(kalan<=0) kayitDurdur(false);
+}
+$('mhcalReset').addEventListener('click',()=>{
+  kayitDurdur(true);
+  M.kalSil();M.kalibrasyonSifirla();errEl.textContent='';calCiz();
+});
 calCiz();ciz();
 
 /* =============================================================
@@ -291,6 +338,8 @@ function tick(){
 
   let r=null,id=null;
   if(lm){ r=M.siniflandir(M.feat(lm)); id=r.id; }
+  kayitTik(now);
+  if(kayit) id=null;                 /* kayıt sırasında mühür tetiklenmesin */
   M.guncelle(D,id,dt,now);
 
   cizEl(lm,lm?(D.aday?(D.kilitMs>=M.KILIT_MS?'#8fe388':'#37d6ff'):'#6ee7a0'):null);
