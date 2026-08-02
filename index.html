@@ -165,6 +165,36 @@ function mRy(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,-
 function mRz(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1]);}
 function M(){let o=arguments[0];for(let i=1;i<arguments.length;i++)o=mMul(o,arguments[i]);return o;}
 
+/* =============================================================
+   FIRÇA DOKUSU — prosedürel, hazır görsel yok.
+   Gri tonlu, uzun ve yumuşak darbeler; her darbe kenarlardan taşarken
+   karşı taraftan da çizilerek doku KUSURSUZ DÖŞENİR (512 = ikinin kuvveti,
+   WebGL1'de REPEAT sarma için şart).
+   ============================================================= */
+function fircaDokusuUret(boy){
+  const c=document.createElement('canvas');c.width=c.height=boy;
+  const x=c.getContext('2d');
+  x.fillStyle='#808080';x.fillRect(0,0,boy,boy);         /* nötr gri = etkisiz */
+  let r=987654321; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
+  x.lineCap='round';
+  for(let i=0;i<1400;i++){
+    const uz=boy*(0.05+rnd()*0.22), aci=rnd()*Math.PI, kal=1.5+rnd()*7;
+    const ton=rnd()<0.5?255:0, alfa=0.028+rnd()*0.055;
+    const px=rnd()*boy, py=rnd()*boy;
+    const dx=Math.cos(aci)*uz/2, dy=Math.sin(aci)*uz/2;
+    x.strokeStyle=`rgba(${ton},${ton},${ton},${alfa})`;
+    x.lineWidth=kal;
+    /* 3×3 kaydırma: kenardan taşan darbe karşı kenardan girsin → döşenebilir */
+    for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++){
+      x.beginPath();
+      x.moveTo(px-dx+ox*boy,py-dy+oy*boy);
+      x.lineTo(px+dx+ox*boy,py+dy+oy*boy);
+      x.stroke();
+    }
+  }
+  return c;
+}
+
 /* --- shader --- */
 function sh(type,src){const s=GL.createShader(type);GL.shaderSource(s,src);GL.compileShader(s);
   if(!GL.getShaderParameter(s,GL.COMPILE_STATUS)) throw new Error(GL.getShaderInfoLog(s));return s;}
@@ -180,6 +210,7 @@ varying vec3 vN; varying vec3 vW;
 uniform vec3 uColor; uniform float uEmiss; uniform float uAlpha;
 uniform vec3 uCam; uniform vec3 uFogCol; uniform vec2 uFogR; uniform vec3 uLight;
 uniform vec3 uWarm; uniform vec3 uCool;
+uniform sampler2D uFirca; uniform vec2 uFircaOlcek;   /* .x ince, .y kaba katman */
 /* GUAJ GÖRÜNÜMÜ — doku yok, üç şeyle yapılıyor:
    1) BANTLAMA: sürekli gradyan yerine üç ton kademesi. Suluboya/guaj resimlerde
       ton grupları düz durur, aradaki geçiş dardır.
@@ -187,15 +218,33 @@ uniform vec3 uWarm; uniform vec3 uCool;
       kaydırmak. Bu, o üsluptaki derinlik hissinin asıl kaynağı.
    3) ATMOSFER: uzaklık arttıkça her şey gökyüzü rengine soluyor. Referans
       görselde arkadaki ağaçların neredeyse beyaza dönmesi tam olarak bu. */
+/* Üçdüzlemli örnekleme: UV yok, dünya konumundan üç eksen düzleminde örnekleyip
+   normale göre harmanlıyoruz. Geometriye hiç dokunmadan doku uygulanır ve
+   primitiflerde UV dikişi oluşmaz. */
+float firca(vec3 w,vec3 n,float olcek){
+  vec3 an=abs(n); an/=(an.x+an.y+an.z+1e-5);
+  return texture2D(uFirca,w.zy*olcek).r*an.x
+       + texture2D(uFirca,w.xz*olcek).r*an.y
+       + texture2D(uFirca,w.xy*olcek).r*an.z;
+}
 void main(){
   vec3 n=normalize(vN);
   float dif=max(dot(n,uLight),0.0);
+  /* İki ölçekte fırça: ince darbeler + kaba lekeler */
+  float f1=firca(vW,n,uFircaOlcek.x);
+  float f2=firca(vW,n,uFircaOlcek.y);
+  float fr=(f1*0.62+f2*0.38);
+  /* ASIL HİLE: bantlamadan ÖNCE aydınlanmayı fırçayla bozuyoruz. Böylece ışık–
+     gölge sınırı düzgün bir yay olmaktan çıkıp darbeler boyunca dalgalanıyor —
+     guaj resimlerdeki düzensiz ton sınırının kaynağı bu. */
+  dif=clamp(dif+(fr-0.5)*0.46,0.0,1.0);
   /* üç kademe, geçişleri dar tutulmuş */
-  float b=smoothstep(0.18,0.30,dif)*0.34
-         +smoothstep(0.46,0.58,dif)*0.34
-         +smoothstep(0.74,0.86,dif)*0.32;
+  float b=smoothstep(0.20,0.27,dif)*0.34
+         +smoothstep(0.48,0.55,dif)*0.34
+         +smoothstep(0.76,0.83,dif)*0.32;
   vec3 isik=mix(uCool,uWarm,b);                 /* gölge soğuk, ışık sıcak */
   vec3 col=uColor*(0.62+0.62*b)*isik;
+  col*=0.86+fr*0.28;                            /* yüzeye fırça değeri */
   /* kenar ışığı: siluetin dış hattında soluk bir kaçak ışık */
   vec3 v=normalize(uCam-vW);
   float rim=pow(1.0-max(dot(n,v),0.0),3.0);
@@ -209,7 +258,7 @@ GL.linkProgram(prog);
 if(!GL.getProgramParameter(prog,GL.LINK_STATUS)) throw new Error(GL.getProgramInfoLog(prog));
 GL.useProgram(prog);
 const U={}, A={};
-['uM','uV','uPr','uColor','uEmiss','uAlpha','uCam','uFogCol','uFogR','uLight','uWarm','uCool'].forEach(n=>U[n]=GL.getUniformLocation(prog,n));
+['uM','uV','uPr','uColor','uEmiss','uAlpha','uCam','uFogCol','uFogR','uLight','uWarm','uCool','uFirca','uFircaOlcek'].forEach(n=>U[n]=GL.getUniformLocation(prog,n));
 ['aP','aN'].forEach(n=>{A[n]=GL.getAttribLocation(prog,n);GL.enableVertexAttribArray(A[n]);});
 GL.enable(GL.DEPTH_TEST);
 /* Yüksek anahtarlı kar paleti: sis rengi = gökyüzü rengi, ikisi aynı olunca
@@ -219,7 +268,23 @@ GL.uniform3f(U.uFogCol,0.83,0.88,0.95);
 GL.uniform2f(U.uFogR,26,86);
 GL.uniform3f(U.uWarm,1.04,0.98,0.88);   /* ışık: hafif sıcak */
 GL.uniform3f(U.uCool,0.58,0.68,0.90);   /* gölge: doygun soğuk — değer aralığını bu açıyor */
-{const l=[0.38,0.82,0.42],ll=Math.hypot(...l);GL.uniform3f(U.uLight,l[0]/ll,l[1]/ll,l[2]/ll);}
+/* Işık kasten YATIK. Tepeden gelirse zeminin aydınlanması her yerde aynı olur,
+   tek banda düşer ve fırça hiçbir sınırı kesemez — doku görünmez kalır. Yatık
+   ışıkta zemin bant kenarına oturuyor ve darbeler ton sınırını dalgalandırıyor. */
+{const l=[0.55,0.62,0.48],ll=Math.hypot(...l);GL.uniform3f(U.uLight,l[0]/ll,l[1]/ll,l[2]/ll);}
+{ const tex=GL.createTexture();
+  GL.bindTexture(GL.TEXTURE_2D,tex);
+  GL.pixelStorei(GL.UNPACK_FLIP_Y_WEBGL,false);
+  GL.texImage2D(GL.TEXTURE_2D,0,GL.RGBA,GL.RGBA,GL.UNSIGNED_BYTE,fircaDokusuUret(512));
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_WRAP_S,GL.REPEAT);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_WRAP_T,GL.REPEAT);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MIN_FILTER,GL.LINEAR_MIPMAP_LINEAR);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MAG_FILTER,GL.LINEAR);
+  GL.generateMipmap(GL.TEXTURE_2D);
+  GL.activeTexture(GL.TEXTURE0);GL.bindTexture(GL.TEXTURE_2D,tex);
+  GL.uniform1i(U.uFirca,0);
+  GL.uniform2f(U.uFircaOlcek,0.42,0.095);   /* ince darbe · kaba leke */
+}
 
 /* --- geometri üreticileri --- */
 function mesh(pos,nor,idx,mode){
