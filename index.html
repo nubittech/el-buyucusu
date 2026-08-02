@@ -18,18 +18,30 @@ canvas{touch-action:none}
 #hud{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:14px;z-index:5;text-align:right;
  font-weight:700;text-shadow:0 2px 10px #000;pointer-events:none}
 #hud .score{font-size:24px;color:#ffd166;letter-spacing:1px}
-#hud .hearts{font-size:13px;letter-spacing:2px;margin-top:2px}
-#hud .ammo{font-size:15px;letter-spacing:1px;margin-top:4px;min-height:20px}
-#shieldWrap{width:86px;height:7px;background:rgba(255,255,255,.14);border-radius:99px;margin:6px 0 0 auto;overflow:hidden}
-#shieldBar{height:100%;width:100%;background:linear-gradient(90deg,#37d6ff,#7db2ff);border-radius:99px}
+#hud .cw{width:104px;height:8px;background:rgba(255,255,255,.14);border-radius:99px;margin:6px 0 0 auto;overflow:hidden}
+#hud .cw i{display:block;height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#ff5e6a,#ff9e3d);transition:width .18s}
+#hud .cl{font-size:10px;color:#b9aee0;letter-spacing:1px;margin-top:3px}
+/* mühür dizisi + yüklenen beceri: sol altta, elin gördüğünü oyuncuya geri söyler */
+#spell{position:absolute;left:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);z-index:6;pointer-events:none}
+#seqStrip{display:flex;gap:6px;align-items:center;min-height:44px}
+#seqStrip .c{font-size:24px;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;
+ background:rgba(12,6,34,.72);border:1px solid rgba(255,255,255,.2)}
+#seqStrip .c.g{opacity:.35}
+#lockPip{width:104px;height:5px;background:rgba(255,255,255,.16);border-radius:99px;overflow:hidden;margin-top:2px}
+#lockPip i{display:block;height:100%;width:0;border-radius:99px;background:#37d6ff}
+#lockPip.rdy i{background:#ffb347}
+#skillNow{font-size:15px;font-weight:800;text-shadow:0 2px 10px #000;margin-top:6px;min-height:20px}
+#skillSub2{font-size:11px;color:#b9aee0;text-shadow:0 2px 8px #000;min-height:14px}
 #status{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 142px);
  z-index:5;background:rgba(12,6,34,.66);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(8px);
  -webkit-backdrop-filter:blur(8px);padding:8px 16px;border-radius:999px;font-size:13px;white-space:nowrap;
  pointer-events:none;transition:opacity .25s;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
-#simBar{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);left:14px;z-index:6;display:none;gap:10px}
+#simBar{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:50%;transform:translateX(-50%);
+ z-index:7;display:none;gap:7px}
 #simBar button{background:linear-gradient(180deg,#5b2ee0,#3b1a99);color:#fff;border:1px solid rgba(255,255,255,.3);
- border-radius:14px;padding:14px 16px;font-size:15px;font-weight:700;box-shadow:0 4px 18px rgba(80,40,220,.45)}
-#simBar button:active{transform:scale(.95)}
+ border-radius:13px;padding:11px 9px;font-size:19px;line-height:1;box-shadow:0 4px 18px rgba(80,40,220,.45)}
+#simBar button:active{transform:scale(.92)}
+#simBar button.gun{background:linear-gradient(180deg,#ff9e3d,#e8552e)}
 .ov2{position:absolute;inset:0;z-index:10;background:rgba(7,3,20,.93);display:flex;flex-direction:column;
  align-items:center;justify-content:center;text-align:center;padding:28px;gap:14px}
 .ov2 h1{font-size:30px;background:linear-gradient(90deg,#ffb347,#ff5e8a,#a06bff);
@@ -51,21 +63,29 @@ canvas{touch-action:none}
 <canvas id="ov"></canvas>
 <video id="cam" playsinline muted autoplay></video>
 <canvas id="pip"></canvas>
-<div id="hud"><div class="score" id="score">0</div><div class="hearts" id="hearts"></div><div class="ammo" id="ammo"></div>
- <div id="shieldWrap"><div id="shieldBar"></div></div></div>
+<div id="hud"><div class="score" id="score">0</div>
+ <div class="cw"><i id="hpBar"></i></div><div class="cl" id="hpLbl">CAN 100</div></div>
 <div id="status">Yükleniyor…</div>
-<div id="simBar"><button id="btnCharge">👌 Şarj</button><button id="btnFire">👉 Ateş</button><button id="btnBlock">✋ Kalkan</button></div>
+<div id="spell">
+  <div id="seqStrip"></div>
+  <div id="lockPip"><i></i></div>
+  <div id="skillNow"></div><div id="skillSub2"></div>
+</div>
+<div id="simBar">
+  <button data-p="fire">🔥</button><button data-p="air">🌪</button><button data-p="water">💧</button>
+  <button data-p="bolt">⚡</button><button data-p="earth">🪨</button><button data-p="gun" class="gun">👉</button>
+</div>
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">Prototip v5.2 · motor bekleniyor…</div>
+  <div class="sub" id="subLine">Faz 2 · v6.0 · motor bekleniyor…</div>
   <div class="rules">
-    🎯 <b>Oto-kilit:</b> kamera hep en yakın düşmana kilitli — nişan yok<br>
-    🕹️ <b>Sağ başparmak:</b> sağ yarıda sürükle → manevra/strafe<br>
-    🧱 <b>Siperler:</b> engellerin arkasına saklan<br>
-    👌 <b>Mühür:</b> ateş topu şarjı (3 atış) → 👉 kilitli hedefe fırlar<br>
-    ✋ <b>Mühür:</b> kalkan — avuç tam açık, parmaklar ayrık ve kameraya dönük;
-       kısa süre sabit tut. Enerjisi sınırlı, taşıdığın şarjı bozar
+    🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
+    ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
+    👉 <b>Silah</b> mührü diziyi kapatır → beceri yüklenir → ateşlenir<br>
+    ⚔️ <b>Havada çarpışma:</b> döngüde üstün olan deler — 🔥→🌪→⚡→🪨→💧→🔥<br>
+    🧱 <b>Siper:</b> delip geçen mermi seni kovalar, tek kaçış engellerin arkası<br>
+    🕹️ <b>Sağ başparmak:</b> sağ yarıda sürükle → manevra
   </div>
   <button class="bigbtn" id="startBtn">Başlat</button>
   <div class="note">Başlamak için ekranda herhangi bir yere dokunabilirsin. Kamera izni istenecek; görüntün cihazından çıkmaz, ekranda da gösterilmez. Kamera açılamazsa simülasyon moduna geçilir.</div>
@@ -79,6 +99,7 @@ canvas{touch-action:none}
   <button class="bigbtn" id="retryBtn">Tekrar Dene</button>
 </div>
 
+<script src="muhur.js"></script>
 <script>
 'use strict';
 /* =============================================================
@@ -90,8 +111,10 @@ const ov=document.getElementById('ov'), ctx=ov.getContext('2d');
 const pip=document.getElementById('pip'), pctx=pip.getContext('2d');
 const video=document.getElementById('cam');
 const statusEl=document.getElementById('status'), scoreEl=document.getElementById('score');
-const heartsEl=document.getElementById('hearts'), ammoEl=document.getElementById('ammo');
-document.getElementById('subLine').textContent='Prototip v5.2 · motor hazır ✓';
+const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById('hpLbl');
+const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
+const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
+document.getElementById('subLine').textContent='Faz 2 · v6.0 · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -263,7 +286,12 @@ function draw(geo,model,color,emiss,alpha){
    BÖLÜM 2 — OYUN
    ============================================================= */
 const AR=30; /* arena yarı-boyu */
-const G={running:false,over:false,score:0,hearts:5,flash:0,spawnT:1,t:0};
+const MU=window.MUHUR;                       /* paylaşılan mühür/element katmanı */
+const EL_IDS=Object.keys(MU.ELEM);
+const OY_CAN=100, EN_CAN=100;                /* düello birkaç doğru okuma sürsün */
+const MAX_DUSMAN=3;                          /* spam yok: aynı anda en fazla 3 */
+const TELEGRAF=1100;                         /* düşman mührünü bu kadar önce belli eder */
+const G={running:false,over:false,score:0,can:OY_CAN,flash:0,spawnT:1,t:0};
 const P={x:0,z:0,yaw:0,targetYaw:0,r:0.55};
 let camYaw=0,camX=0,camY=4.6,camZ=-8,camFx=0,camFy=0,camFz=1;
 
@@ -311,18 +339,6 @@ function hasLOS(x1,z1,x2,z2,y){
     if(pointBlocked(x1+(x2-x1)*t,y,z1+(z2-z1)*t)) return false;}
   return true;
 }
-function rayAABB(ox,oy,oz,dx,dy,dz,b){
-  let tmin=0,tmax=1e9;
-  const ax=[[b.minx,b.maxx,ox,dx],[0,b.h,oy,dy],[b.minz,b.maxz,oz,dz]];
-  for(const a of ax){
-    if(Math.abs(a[3])<1e-7){ if(a[2]<a[0]||a[2]>a[1]) return 0; }
-    else{let t1=(a[0]-a[2])/a[3],t2=(a[1]-a[2])/a[3];
-      if(t1>t2){const q=t1;t1=t2;t2=q;}
-      tmin=Math.max(tmin,t1);tmax=Math.min(tmax,t2);
-      if(tmin>tmax) return 0;}
-  }
-  return tmin>0.1?tmin:0;
-}
 
 /* --- varlıklar --- */
 const enemies=[],shots=[],fx=[];
@@ -333,26 +349,31 @@ function spawnEnemy(){
   /* iki tip: süzülen hayalet · yerde koşan ninja (oyuncuyla aynı iskelet, düşman paleti).
      Ninja daha çevik ve daha yakından taciz eder; hayalet yavaş ve uzaktan atar. */
   const ninja=Math.random()<0.45;
-  const e={x,z,kind:ninja?'ninja':'ghost',arm:0,
+  /* Her düşmanın SABİT bir elementi var ve rengiyle belli ediyor — oyuncu daha
+     çarpışma başlamadan hangi elementle karşılık vereceğini bilsin. */
+  const el=EL_IDS[Math.floor(Math.random()*EL_IDS.length)];
+  const e={x,z,kind:ninja?'ninja':'ghost',arm:0,el,
+    can:EN_CAN,canMax:EN_CAN,
     sp:(2.2+Math.random()*1.4)*(ninja?1.35:1),
-    cd:(2.4+Math.random()*1.6)*(ninja?0.8:1),
+    cd:2.2+Math.random()*1.4,
     ss:Math.random()<0.5?-1:1,bob:Math.random()*6,pi:Math.floor(Math.random()*3)};
   pushOut(e,0.6);enemies.push(e);
 }
-function fire(x,y,z,dx,dy,dz,speed,friendly,tgt){
-  shots.push({x,y,z,vx:dx*speed,vy:dy*speed,vz:dz*speed,friendly,life:4,tgt});
+/* Mermi artık element ve güç taşıyor: havada çarpışmayı bu ikisi çözüyor. */
+function fire(x,y,z,dx,dy,dz,el,guc,sahip,tgt){
+  const sp=MU.ELEM[el].hiz;
+  shots.push({x,y,z,vx:dx*sp,vy:dy*sp,vz:dz*sp,el,guc,sahip,life:4,tgt,r:0.45});
 }
 function boom(x,y,z,scale,color){ fx.push({x,y,z,t:0,scale,color}); }
 
 /* =============================================================
    GİRİŞLER — joistik (dokunmatik) + jest durum makinesi
    ============================================================= */
-const S={mode:'idle',ammo:0,AMMO_MAX:3,chargeMs:0,CHARGE_NEED:350,cooldownUntil:0,
-  gunFrames:0,palmMs:0,PALM_NEED:220,handSeen:false,lastHandTs:0,
+const S={handSeen:false,lastHandTs:0,
   cursor:{x:innerWidth/2,y:innerHeight/2,ok:false},
   aim:{x:innerWidth/2,y:innerHeight/3,ok:false},
-  blocking:false,shield:1,shieldLock:false,
-  simPinch:false,simPalm:false,camMode:false};
+  simPoz:null,camMode:false};
+const D=MU.yeniDizi();            /* mühür dizisi durumu — muhur.js yönetiyor */
 let LOCK=null; /* kilitli düşman */
 function updateLock(){
   let best=null,bd=1e9;
@@ -363,8 +384,11 @@ const J={active:false,id:-1,ox:0,oy:0,dx:0,dy:0,max:52};
 
 function setStatus(t){ if(statusEl.textContent!==t) statusEl.textContent=t; }
 function vibrate(ms){ try{ navigator.vibrate&&navigator.vibrate(ms);}catch(e){} }
-function heartsDraw(){ heartsEl.textContent='❤️'.repeat(Math.max(0,G.hearts)); }
-heartsDraw();
+function canCiz(){
+  const o=Math.max(0,G.can)/OY_CAN;
+  hpBarEl.style.width=(o*100).toFixed(0)+'%';
+  hpLblEl.textContent='CAN '+Math.max(0,Math.round(G.can));
+}
 
 addEventListener('contextmenu',e=>e.preventDefault());
 /* --- giriş çekirdeği --- */
@@ -375,8 +399,8 @@ function joyMove(x,y,id){ if(J.active&&id===J.id){
   if(m>J.max){J.dx*=J.max/m;J.dy*=J.max/m;} } }
 function joyEnd(id){ if(J.active&&id===J.id){J.active=false;J.dx=0;J.dy=0;} }
 function inputDown(x,y,id){ if(!G.running) return;
-  if(x>W*0.5) joyStart(x,y,id);
-  else { S.aim.x=x;S.aim.y=y;S.aim.ok=true; tryFire(true); } }
+  if(x>W*0.5) joyStart(x,y,id);   /* sağ yarı: manevra. Sol yarıda dokunuşun işlevi yok —
+                                     ateşleme artık yalnız mühür dizisinden geçiyor. */ }
 
 /* iOS Safari pointermove'u güvenilir iletmiyor → dokunmatikte NATIVE touch olayları */
 const HAS_TOUCH='ontouchstart' in window;
@@ -400,17 +424,17 @@ if(HAS_TOUCH){
   addEventListener('pointerup',pEnd);addEventListener('pointercancel',pEnd);
 }
 
-const btnCharge=document.getElementById('btnCharge');
-const btnFire=document.getElementById('btnFire');
-const btnBlock=document.getElementById('btnBlock');
-btnCharge.addEventListener('pointerdown',e=>{e.stopPropagation();S.simPinch=true;});
-btnCharge.addEventListener('touchstart',e=>{e.stopPropagation();S.simPinch=true;},{passive:true});
-btnBlock.addEventListener('pointerdown',e=>{e.stopPropagation();S.simPalm=true;});
-btnBlock.addEventListener('touchstart',e=>{e.stopPropagation();S.simPalm=true;},{passive:true});
-btnFire.addEventListener('click',e=>{e.stopPropagation();tryFire(true);});
-btnFire.addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();tryFire(true);},{passive:false});
-addEventListener('pointerup',()=>{S.simPinch=false;S.simPalm=false;});
-addEventListener('touchend',()=>{S.simPinch=false;S.simPalm=false;});
+/* Simülasyon butonları: kamera yokken mührü basılı tutarak ver.
+   Gerçek eldeki gibi zaman kilidinden geçer, yani basılı tutmak gerekir. */
+for(const b of document.querySelectorAll('#simBar button')){
+  const poz=b.dataset.p;
+  const bas=e=>{e.stopPropagation();S.simPoz=poz;};
+  b.addEventListener('pointerdown',bas);
+  b.addEventListener('touchstart',bas,{passive:true});
+}
+addEventListener('pointerup',()=>{S.simPoz=null;});
+addEventListener('touchend',()=>{S.simPoz=null;});
+addEventListener('pointercancel',()=>{S.simPoz=null;});
 
 /* =============================================================
    MediaPipe el takibi (kamera görüntüsü GÖSTERİLMEZ)
@@ -433,33 +457,12 @@ async function initCamera(){
 }
 function mapN(v){ return Math.min(1,Math.max(0,(v-0.15)/0.7)); }
 function toScreen(lm){ return {x:mapN(1-lm.x)*W,y:mapN(lm.y)*H}; }
-const d2v=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
-function analyzeHand(lm){
-  const palmLen=d2v(lm[0],lm[9])||1e-6;
-  const pinch=d2v(lm[4],lm[8])<palmLen*0.45;
-  const ext=(tip,pipJ)=>d2v(lm[tip],lm[0])>d2v(lm[pipJ],lm[0])*1.12;
-  const i=ext(8,6),m=ext(12,10),r=ext(16,14),p=ext(20,18);
-
-  /* --- kalkan: dört bağımsız şart birden (eşikler sentetik iskeletlerle kalibre edildi) --- */
-  const palmWid=d2v(lm[5],lm[17])||1e-6;              /* boğum hattı: işaret MCP → serçe MCP */
-  /* 1) dört parmak da BELİRGİN açık — gevşek 1.12 değil, 1.18: yarı bükük el elenir */
-  const extS=(tip,pipJ)=>d2v(lm[tip],lm[0])>d2v(lm[pipJ],lm[0])*1.18;
-  const openFour=extS(8,6)&&extS(12,10)&&extS(16,14)&&extS(20,18);
-  /* 2) avuç kameraya dönük mü: boy/en oranı. El yana dönünce (yaw) en kısalır → oran
-        yükselir; öne-arkaya yatınca (pitch) boy kısalır → oran düşer. ~±45°'de kapanır. */
-  const aspect=palmLen/palmWid;
-  const facing=aspect>0.95&&aspect<1.72;
-  /* 3) parmaklar yelpaze gibi ayrık: işaret ve serçe yönleri arası açı > 22° (ölçekten bağımsız) */
-  const ax=lm[8].x-lm[5].x, ay=lm[8].y-lm[5].y, bx=lm[20].x-lm[17].x, by=lm[20].y-lm[17].y;
-  const spread=(ax*bx+ay*by)/((Math.hypot(ax,ay)||1e-6)*(Math.hypot(bx,by)||1e-6))<0.927;
-  /* 4) baş parmak da açık ve avuçtan uzakta */
-  const thumbOut=d2v(lm[4],lm[17])>palmWid*1.25&&d2v(lm[4],lm[5])>palmWid*0.50;
-
-  return {pinch,gun:i&&m&&!r&&!p&&!pinch,palm:openFour&&facing&&spread&&thumbOut&&!pinch};
-}
 let lastVideoTs=-1;
+/* Tanıma tamamen muhur.js'te — bu sayfada eşik ya da geometri yok.
+   Kalibrasyon da aynı localStorage anahtarından geliyor: test sayfasında
+   kaydettiğin el, oyunda da geçerli. */
 function readHand(now){
-  let pose={pinch:S.simPinch,gun:false,palm:S.simPalm},lm=null;
+  let pozId=S.simPoz, lm=null, r=null;
   if(S.camMode&&landmarker&&video.readyState>=2){
     try{
       if(video.currentTime!==lastVideoTs){
@@ -470,23 +473,28 @@ function readHand(now){
     }catch(e){}
     if(lm){
       S.handSeen=true;S.lastHandTs=now;
-      const a=analyzeHand(lm);
-      pose={pinch:a.pinch||S.simPinch,gun:a.gun,palm:a.palm||S.simPalm};
+      r=MU.siniflandir(MU.feat(lm));
+      pozId=r.id||S.simPoz;
       const c=toScreen(lm[9]);S.cursor.x+=(c.x-S.cursor.x)*0.4;S.cursor.y+=(c.y-S.cursor.y)*0.4;S.cursor.ok=true;
-      if(a.gun){const t=toScreen(lm[8]);S.aim.x+=(t.x-S.aim.x)*0.35;S.aim.y+=(t.y-S.aim.y)*0.35;S.aim.ok=true;}
-    } else {S.cursor.ok=false;if(now-S.lastHandTs>1500){S.handSeen=false;if(S.mode==='charged')cancelSpell();}}
-    drawPip(lm,pose);
+      if(r.id==='gun'){const t=toScreen(lm[8]);S.aim.x+=(t.x-S.aim.x)*0.35;S.aim.y+=(t.y-S.aim.y)*0.35;S.aim.ok=true;}
+    } else {
+      S.cursor.ok=false;
+      if(now-S.lastHandTs>1500){ S.handSeen=false; cancelSpell(); }
+    }
+    drawPip(lm,pozId);
   }
-  return pose;
+  return pozId;
 }
 const BONES=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
  [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-function drawPip(lm,pose){
+function drawPip(lm,pozId){
   const w=pip.width,h=pip.height;
   pctx.fillStyle='#0a0622';pctx.fillRect(0,0,w,h);
   if(lm){
     const X=v=>(1-v.x)*w,Y=v=>v.y*h;
-    const col=pose.pinch?'#ffb347':(pose.gun?'#ff5e8a':(pose.palm?'#37d6ff':'#6ee7a0'));
+    /* iskelet, tanınan mührün renginde — hangi mührü verdiğin anında görünsün */
+    const col=pozId==='gun'?'#ffb347'
+      :pozId?('#'+MU.ELEM[pozId].renk.toString(16).padStart(6,'0')):'#6ee7a0';
     pctx.strokeStyle=col;pctx.globalAlpha=0.55;pctx.lineWidth=2;
     for(const b of BONES){pctx.beginPath();pctx.moveTo(X(lm[b[0]]),Y(lm[b[0]]));pctx.lineTo(X(lm[b[1]]),Y(lm[b[1]]));pctx.stroke();}
     pctx.globalAlpha=1;pctx.fillStyle=col;
@@ -498,89 +506,58 @@ function drawPip(lm,pose){
 }
 
 /* =============================================================
-   BÜYÜ MANTIĞI (1 şarj = 3 atış)
+   MÜHÜR → BECERİ → ATEŞ
+   Dizi motoru muhur.js'te; burada yalnız olayları oyuna bağlıyoruz.
    ============================================================= */
-const shieldBarEl=document.getElementById('shieldBar');
-function updateSpell(pose,dtMs,now){
-  /* kalkan mühürü — zaman kilidi: poz S.PALM_NEED ms boyunca sabit tutulmadan açılmaz.
-     Böylece pinch→silah geçişinde parmakların anlık "açık" görünmesi kalkanı tetiklemez
-     ve taşınan şarjı bozmaz. Bırakınca kademeli düşer → tek karelik kayıpta titremez. */
-  if(pose.palm) S.palmMs=Math.min(S.PALM_NEED+180,S.palmMs+dtMs);
-  else          S.palmMs=Math.max(0,S.palmMs-dtMs*1.6);
-  const wantBlock=S.palmMs>=S.PALM_NEED&&!S.shieldLock;
-  S.blocking=wantBlock&&S.shield>0.02;
-  if(S.blocking){
-    S.shield=Math.max(0,S.shield-dtMs/1300);
-    if(S.shield<=0.02) S.shieldLock=true;
-    if(S.mode==='charged'||S.chargeMs>0){S.mode='idle';S.chargeMs=0;S.ammo=0;S.gunFrames=0;}
-  } else {
-    S.shield=Math.min(1,S.shield+dtMs/2600);
-    if(S.shieldLock&&S.shield>0.4) S.shieldLock=false;
+function updateSpell(pozId,dtMs,now){
+  for(const o of MU.guncelle(D,pozId,dtMs,now)){
+    if(o.tip==='muhur') vibrate(12);
+    else if(o.tip==='yuklemeBasladi') vibrate(25);
+    else if(o.tip==='basarisiz') vibrate(60);
+    else if(o.tip==='yuklendi'){ ates(o.beceri); vibrate(45); }
   }
-  shieldBarEl.style.width=(S.shield*100).toFixed(0)+'%';
-  if(now<S.cooldownUntil){ setSpellStatus(); return; }
-  if(!S.blocking){
-    if(S.mode==='idle'){
-      if(pose.pinch){S.chargeMs+=dtMs;
-        if(S.chargeMs>=S.CHARGE_NEED){S.mode='charged';S.ammo=S.AMMO_MAX;S.chargeMs=S.CHARGE_NEED;vibrate(30);}}
-      else S.chargeMs=Math.max(0,S.chargeMs-dtMs*2);
-    } else if(S.mode==='charged'){
-      if(pose.gun)S.gunFrames++;else S.gunFrames=0;
-      if(S.gunFrames>=3) tryFire(false);
-    }
-  }
+  cizMuhur();
   setSpellStatus();
 }
-/* ekran noktası → dünya noktası (nişan ışını) */
-function aimWorld(){
-  const th=Math.tan(FOV/2),asp=W/H;
-  const nx=(S.aim.x/W)*2-1, ny=-((S.aim.y/H)*2-1);
-  /* kamera taban vektörleri */
-  const fx=camFx,fy=camFy,fz=camFz;
-  /* sağ = F × up */
-  let rx=-fz,ry=0,rz=fx;const rl=Math.hypot(rx,rz)||1;rx/=rl;rz/=rl;
-  /* yukarı = R × F */
-  const ux=ry*fz-rz*fy,uy=rz*fx-rx*fz,uz=rx*fy-ry*fx;
-  let dx=fx+rx*nx*th*asp+ux*ny*th,
-      dy=fy+ry*nx*th*asp+uy*ny*th,
-      dz=fz+rz*nx*th*asp+uz*ny*th;
-  const dl=Math.hypot(dx,dy,dz);dx/=dl;dy/=dl;dz/=dl;
-  let best=1e9;
-  if(dy<-1e-4){const t=-camY/dy;if(t>0)best=Math.min(best,t);}
-  for(const b of OBS){const t=rayAABB(camX,camY,camZ,dx,dy,dz,b);if(t&&t<best)best=t;}
-  if(best>70)best=45;
-  return {x:camX+dx*best,y:Math.max(0.2,camY+dy*best),z:camZ+dz*best};
-}
-function tryFire(fromTap){
-  if(S.mode!=='charged'||S.ammo<=0||S.blocking) return;
-  if(performance.now()<S.cooldownUntil) return;
+/* Yükleme bitince beceri kendiliğinden çıkar: yükleme süresi boyunca açıkta
+   kalmak zaten riskin kendisi, üstüne bir de tetik beklemek tempoyu boğuyor. */
+function ates(beceri){
   const sx=P.x,sy=1.35,sz=P.z;
   let dx,dy,dz;
-  if(LOCK){
-    const ty=1.2+Math.sin(LOCK.bob)*0.15;
-    dx=LOCK.x-sx;dy=ty-sy;dz=LOCK.z-sz;
-  } else { /* hedef yoksa baktığın yöne */
-    dx=Math.sin(P.yaw);dy=-0.05;dz=Math.cos(P.yaw);
-  }
-  const dl=Math.hypot(dx,dy,dz)||1;dx/=dl;dy/=dl;dz/=dl;
-  fire(sx,sy,sz,dx,dy,dz,22,true,LOCK);
-  S.ammo--;
-  if(S.ammo<=0){S.mode='idle';S.chargeMs=0;S.gunFrames=0;}
-  S.cooldownUntil=performance.now()+350;
-  vibrate(50);
+  if(LOCK){ const ty=eyOf(LOCK); dx=LOCK.x-sx;dy=ty-sy;dz=LOCK.z-sz; }
+  else { dx=Math.sin(P.yaw);dy=-0.05;dz=Math.cos(P.yaw); }
+  const dl=Math.hypot(dx,dy,dz)||1;
+  fire(sx,sy,sz,dx/dl,dy/dl,dz/dl,beceri.el,beceri.kat,'oyuncu',LOCK);
+  D.beceri=null;D.yukMs=0;D.son=null;
 }
-function cancelSpell(){
-  S.mode='idle';S.chargeMs=0;S.palmMs=0;S.gunFrames=0;S.ammo=0;
+function cizMuhur(){
+  let h='';
+  for(const id of D.dizi) h+=`<div class="c">${MU.BY[id].el}</div>`;
+  if(D.dizi.length) h+='<div class="c g">👉</div>';
+  if(seqStripEl.innerHTML!==h) seqStripEl.innerHTML=h;
+  const pr=Math.min(1,D.kilitMs/MU.KILIT_MS);
+  lockPipEl.firstElementChild.style.width=(pr*100)+'%';
+  lockPipEl.classList.toggle('rdy',pr>=1);
+  if(D.beceri){
+    const o=D.yukTotal?D.yukMs/D.yukTotal:1;
+    skillNowEl.textContent=MU.BY[D.beceri.el].el+' '+D.beceri.ad;
+    skillNowEl.style.color='#'+MU.ELEM[D.beceri.el].renk.toString(16).padStart(6,'0');
+    skillSubEl.textContent=D.beceri.tur+' ×'+D.beceri.kat+' · yükleniyor %'+Math.round(o*100);
+  } else if(performance.now()<D.cezaUntil){
+    skillNowEl.textContent='✗ eşleşme yok';skillNowEl.style.color='#ff7a7a';
+    skillSubEl.textContent=D.son||'';
+  } else { skillNowEl.textContent='';skillSubEl.textContent=''; }
 }
+function cancelSpell(){ MU.diziSifirla(D);D.beceri=null;D.yukMs=0;D.aday=null;D.kilitMs=0; }
 function setSpellStatus(){
   if(G.over) return;
-  if(S.blocking){setStatus('🛡 Kalkan aktif');return;}
-  if(!S.camMode){setStatus(S.mode==='charged'?`🔥 Hazır (${S.ammo}/${S.AMMO_MAX}) — Ateş butonu`:'👌 Şarj butonunu basılı tut');return;}
-  if(!S.handSeen){setStatus('✋ Sol elini kameraya göster');return;}
-  if(S.mode==='charged'){setStatus(`🔥 Hazır (${S.ammo}/${S.AMMO_MAX}) — 👉 fırlat!`);return;}
-  if(S.chargeMs>40){setStatus('✨ Şarj oluyor…');return;}
-  setStatus('👌 ateş topu · ✋ kalkan');
+  if(!S.camMode){ setStatus('Mühür butonlarını basılı tut → 👉 ile kapat'); return; }
+  if(!S.handSeen){ setStatus('✋ Elini kameraya göster'); return; }
+  if(D.beceri){ setStatus('⏳ '+D.beceri.ad+' yükleniyor'); return; }
+  if(D.dizi.length){ setStatus('👉 silah pozu ile kapat'); return; }
+  setStatus('🔥 🌪 💧 ⚡ 🪨 — bir mühür yap');
 }
+
 
 /* =============================================================
    GÜNCELLEME
@@ -613,9 +590,9 @@ function updateCamera(dt){
   const fl=Math.hypot(fx,fy,fz)||1;camFx=fx/fl;camFy=fy/fl;camFz=fz/fl;
 }
 function updateEnemies(dt,now){
+  /* Spam yok: en fazla MAX_DUSMAN, ve yeni düşman ancak arada boşluk varken gelir. */
   G.spawnT-=dt;
-  const maxAlive=3+Math.min(4,Math.floor(G.score/40));
-  if(G.spawnT<=0&&enemies.length<maxAlive){spawnEnemy();G.spawnT=Math.max(1.1,2.6-G.score*0.012);}
+  if(G.spawnT<=0&&enemies.length<MAX_DUSMAN){ spawnEnemy(); G.spawnT=4.5+Math.random()*2.5; }
   for(let i=enemies.length-1;i>=0;i--){const e=enemies[i];
     e.bob+=dt*3;
     const dx=P.x-e.x,dz=P.z-e.z,d=Math.hypot(dx,dz)||1e-4;
@@ -630,51 +607,91 @@ function updateEnemies(dt,now){
     else {mx=-uz*e.ss;mz=ux*e.ss;if(Math.random()<0.004)e.ss*=-1;}
     e.x+=mx*e.sp*dt;e.z+=mz*e.sp*dt;
     pushOut(e,0.6);
-    /* temas: kamikaze (kalkan varsa hasarsız savuşturulur) */
-    if(d<1.15){
-      if(S.blocking){boom(e.x,1.1,e.z,1.5,0x37d6ff);S.shield=Math.max(0,S.shield-0.25);vibrate(30);}
-      else {boom(e.x,1.1,e.z,1.5,0xff4466);damage();}
-      enemies.splice(i,1);continue;}
-    e.cd-=dt;
-    /* ninja kolunu atıştan hemen önce kaldırır → oyuncuya okunabilir bir işaret */
-    if(e.kind==='ninja'){
-      const want=(los&&d<20&&e.cd<0.5)?1:0;
-      e.arm+=(want-e.arm)*Math.min(1,dt*8);
+    /* yakın temas: artık kamikaze değil, sıyırma hasarı — düello uzun sürsün */
+    if(d<1.05){
+      boom(e.x,1.1,e.z,1.0,MU.ELEM[e.el].renk);
+      hasarAl(6); e.x-=ux*1.6; e.z-=uz*1.6; pushOut(e,0.6);
+      continue;
     }
+    e.cd-=dt;
+    /* TELEGRAF: atıştan TELEGRAF ms önce kol kalkar ve elde element rengi toplanır.
+       Oyuncunun okuyup karşılık yetiştirebileceği pencere tam olarak burası. */
+    const hazirlan = los && d<20 && e.cd<TELEGRAF/1000;
+    e.arm += ((hazirlan?1:0)-e.arm)*Math.min(1,dt*7);
     if(e.cd<=0&&los&&d<20){
       const my=muzzleY(e);
       let sx=P.x-e.x,sy=1.05-my,sz2=P.z-e.z;
       const sl=Math.hypot(sx,sy,sz2)||1;
-      fire(e.x,my,e.z,sx/sl,sy/sl,sz2/sl,e.kind==='ninja'?10:8.5,false);
-      e.cd=(2+Math.random()*1.8)*(e.kind==='ninja'?0.8:1);
+      fire(e.x,my,e.z,sx/sl,sy/sl,sz2/sl,e.el,1.0,e,null);
+      e.cd=3.0+Math.random()*1.6;
+    }
+  }
+}
+/* --- havada çarpışma: karşı taraftan iki mermi kesişirse muhur.js çözer --- */
+function carpismalar(){
+  for(let i=shots.length-1;i>=0;i--){
+    const a=shots[i]; if(!a) continue;
+    for(let j=i-1;j>=0;j--){
+      const b=shots[j]; if(!b) continue;
+      if((a.sahip==='oyuncu')===(b.sahip==='oyuncu')) continue;   /* aynı taraf çarpışmaz */
+      if(Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z) > a.r+b.r+0.35) continue;
+      const r=MU.carpismaCoz(a,b);
+      const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,mz=(a.z+b.z)/2;
+      if(r.sonuc==='notr'){
+        boom(mx,my,mz,1.5,0xffffff);
+        shots.splice(i,1); shots.splice(j,1); vibrate(18);
+        break;
+      }
+      /* delip geçme: kazanan gücü azalarak devam eder ve kaybedenin sahibine kilitlenir */
+      const kazanan=r.kazanan===a?a:b, kaybeden=r.kazanan===a?b:a;
+      boom(mx,my,mz,1.2,MU.ELEM[kazanan.el].renk);
+      kazanan.guc=Math.max(0.35,r.kalanGuc);
+      kazanan.tgt = kaybeden.sahip==='oyuncu' ? null : kaybeden.sahip;
+      kazanan.deldi=true;
+      shots.splice(shots.indexOf(kaybeden),1);
+      vibrate(25);
+      break;
     }
   }
 }
 function updateShots(dt){
+  carpismalar();
   for(let i=shots.length-1;i>=0;i--){const s=shots[i];
-    /* dost mermiler kilitli hedefe hafif güdümlü */
-    if(s.friendly&&s.tgt&&enemies.indexOf(s.tgt)>=0){
-      const ty=eyOf(s.tgt);
-      let hx=s.tgt.x-s.x,hy=ty-s.y,hz=s.tgt.z-s.z;
-      const hl=Math.hypot(hx,hy,hz)||1;
-      const sp=Math.hypot(s.vx,s.vy,s.vz);
-      const k=Math.min(1,dt*13);
-      s.vx+=(hx/hl*sp-s.vx)*k;s.vy+=(hy/hl*sp-s.vy)*k;s.vz+=(hz/hl*sp-s.vz)*k;
+    const dost = s.sahip==='oyuncu';
+    /* güdüm: Su doğuştan takipli, delip geçen mermi de hedefe kilitlenir */
+    const takip = MU.ELEM[s.el].takip + (s.deldi?0.6:0);
+    if(takip>0){
+      let tx,ty,tz;
+      if(dost&&s.tgt&&enemies.indexOf(s.tgt)>=0){ tx=s.tgt.x;ty=eyOf(s.tgt);tz=s.tgt.z; }
+      else if(!dost&&s.deldi){ tx=P.x;ty=1.15;tz=P.z; }
+      if(tx!==undefined){
+        let hx=tx-s.x,hy=ty-s.y,hz=tz-s.z;
+        const hl=Math.hypot(hx,hy,hz)||1, sp=Math.hypot(s.vx,s.vy,s.vz), k=Math.min(1,dt*13*takip);
+        s.vx+=(hx/hl*sp-s.vx)*k;s.vy+=(hy/hl*sp-s.vy)*k;s.vz+=(hz/hl*sp-s.vz)*k;
+      }
     }
     s.x+=s.vx*dt;s.y+=s.vy*dt;s.z+=s.vz*dt;s.life-=dt;
+    const renk=MU.ELEM[s.el].renk;
     let dead=false;
+    /* siper: engel arkasına girmek delip geçen mermiden tek kaçış */
     if(s.life<=0||s.y<0.06||s.y>8||pointBlocked(s.x,s.y,s.z)||Math.abs(s.x)>AR+1.5||Math.abs(s.z)>AR+1.5){
-      boom(s.x,Math.max(0.2,s.y),s.z,s.friendly?1.1:0.9,s.friendly?0xffa040:0xbb55ff);dead=true;
-    } else if(s.friendly){
+      boom(s.x,Math.max(0.2,s.y),s.z,1.0,renk);dead=true;
+    } else if(dost){
       for(let k=enemies.length-1;k>=0;k--){const e=enemies[k];
         const ey=eyOf(e);
         if(Math.hypot(e.x-s.x,ey-s.y,e.z-s.z)<0.95){
-          boom(e.x,ey,e.z,1.7,0xffa040);enemies.splice(k,1);
-          G.score+=10;scoreEl.textContent=G.score;dead=true;vibrate(20);break;}}
+          const hasar=MU.ELEM[s.el].hasar*s.guc;
+          e.can-=hasar; boom(e.x,ey,e.z,1.4,renk); dead=true; vibrate(20);
+          if(e.can<=0){
+            boom(e.x,ey,e.z,2.0,renk); enemies.splice(k,1);
+            G.score+=10;scoreEl.textContent=G.score;
+          }
+          break;}}
     } else {
-      if(Math.hypot(P.x-s.x,1.1-s.y,P.z-s.z)<0.85){dead=true;
-        if(S.blocking){boom(s.x,s.y,s.z,1.1,0x37d6ff);S.shield=Math.max(0,S.shield-0.15);vibrate(25);}
-        else {boom(P.x,1.1,P.z,1.2,0xff4466);damage();}}
+      if(Math.hypot(P.x-s.x,1.1-s.y,P.z-s.z)<0.85){
+        dead=true; boom(P.x,1.1,P.z,1.2,renk);
+        hasarAl(MU.ELEM[s.el].hasar*s.guc);
+      }
     }
     if(dead)shots.splice(i,1);
   }
@@ -684,12 +701,12 @@ function updateFx(dt){
   G.flash=Math.max(0,G.flash-dt*1.8);
 }
 let lastDmgT=-1e9;
-function damage(){
+function hasarAl(miktar){
   const n=performance.now();
-  if(n-lastDmgT<900) return; /* hasar sonrası kısa dokunulmazlık */
+  if(n-lastDmgT<450) return;   /* isabet sonrası kısa dokunulmazlık */
   lastDmgT=n;
-  G.hearts--;heartsDraw();G.flash=1;vibrate(80);
-  if(G.hearts<=0)endGame();
+  G.can-=miktar;canCiz();G.flash=Math.min(1,miktar/25);vibrate(80);
+  if(G.can<=0)endGame();
 }
 
 /* =============================================================
@@ -699,7 +716,7 @@ let armRaise=0;
 /* --- paylaşılan ninja modeli: hem oyuncu hem de ninja düşmanlar bunu çizer ---
    C  : renk paleti {SUIT,DARK,ACC,SKIN,GOLD,EYE,eyeGlow,horns}
    run: koşu fazı (-1..1) · ar: sol kolun kalkma oranı (0..1) · tp: kuyruk salınım fazı
-   Sol elin yerel konumunu döndürür — şarj topu / şuriken oraya takılır. */
+   Sol elin yerel konumunu döndürür — yüklenen beceri oraya takılır. */
 function drawNinja(pm,C,run,ar,tp){
   const SUIT=C.SUIT,DARK=C.DARK,ACC=C.ACC,SKIN=C.SKIN;
   /* bacaklar: kalçadan aşağı, koşarken makaslar */
@@ -732,7 +749,7 @@ function drawNinja(pm,C,run,ar,tp){
   /* sağ kol: koşarken salınır */
   draw(GEO.cyl,M(pm,mT(0.42,1.32,0),mRz(-2.65),mRx(run*0.5),mS(0.13,0.5,0.13)),SUIT,0);
   draw(GEO.sph,M(pm,mT(0.62,0.92,run*0.22),mS(0.16,0.16,0.16)),DARK,0);
-  /* sol kol: şarjda / atış hazırlığında öne kalkar */
+  /* sol kol: beceri yüklenirken öne kalkar */
   draw(GEO.cyl,M(pm,mT(-0.42,1.32,0),mRz(2.65-2.3*ar),mRx(-1.35*ar-run*0.5*(1-ar)),mS(0.13,0.52,0.13)),SUIT,0);
   const hx=-0.6+0.22*ar, hy=0.92+0.52*ar, hz=(1-ar)*(-run*0.22)+0.55*ar;
   draw(GEO.sph,M(pm,mT(hx,hy,hz),mS(0.16,0.16,0.16)),DARK,0);
@@ -742,18 +759,18 @@ function drawNinja(pm,C,run,ar,tp){
 const PPAL={SUIT:0x2a3160,DARK:0x1c2246,ACC:0xe03a4e,SKIN:0xf2d5b1,GOLD:0xffd166,EYE:0x14122e,eyeGlow:0,horns:false};
 function drawWizard(now,dt){ /* NINJA */
   const moving=J.active&&Math.hypot(J.dx,J.dy)>5;
-  armRaise+=(((S.mode==='charged'||S.chargeMs>60)?1:0)-armRaise)*Math.min(1,dt*8);
+  armRaise+=((D.beceri?1:0)-armRaise)*Math.min(1,dt*8);
   const run=moving?Math.sin(now*0.014):0;
   const bob=Math.sin(now*0.004)*0.03+(moving?Math.abs(Math.sin(now*0.014))*0.07:0);
   const lean=moving?0.14:0.03;
   const sway=(moving?Math.sin(now*0.014)*0.04:Math.sin(now*0.002)*0.015);
   const pm=M(mT(P.x,bob,P.z),mRy(P.yaw),mRx(lean),mRz(sway));
   const h=drawNinja(pm,PPAL,run,armRaise,now*0.007);
-  /* şarj topu: sol elde 3D olarak da parlar */
-  if(S.chargeMs>30||S.mode==='charged'){
-    const prog=S.chargeMs/S.CHARGE_NEED;
-    const sc=0.14+prog*0.24+(S.mode==='charged'?Math.sin(now*0.02)*0.04:0);
-    draw(GEO.sph,M(pm,mT(h.hx,h.hy+0.14,h.hz+0.1),mS(sc,sc,sc)),0xffb347,1);
+  /* yüklenen beceri sol elde büyüyerek toplanır, rengi elementinin rengi */
+  if(D.beceri){
+    const prog=D.yukTotal?D.yukMs/D.yukTotal:1;
+    const sc=0.12+prog*0.26+(prog>=1?Math.sin(now*0.02)*0.04:0);
+    draw(GEO.sph,M(pm,mT(h.hx,h.hy+0.14,h.hz+0.1),mS(sc,sc,sc)),MU.ELEM[D.beceri.el].renk,1);
   }
 }
 const EPAL=[[0x2fd8ff,0xeaffff],[0x9dff6a,0xf4ffe6],[0xff7de8,0xfff0fb]];
@@ -777,16 +794,17 @@ function drawEnemies(now){
       const run=Math.sin(ninjaStride(e));
       const nm=M(mT(e.x,ninjaBobY(e),e.z),mRy(yaw),mRx(0.12));
       const h=drawNinja(nm,NPAL[e.pi],run,e.arm,e.bob*0.55);
-      /* atışa hazırlanırken elinde şuriken enerjisi toplanır */
-      if(e.arm>0.15){
-        const sc=0.06+e.arm*0.13;
-        draw(GEO.sph,M(nm,mT(h.hx,h.hy+0.14,h.hz+0.1),mS(sc,sc,sc)),NPAL[e.pi].ACC,1);
+      /* TELEGRAF: atıştan önce elde elementin rengi toplanır — oyuncunun
+         hangi elementin geldiğini okuyup karşılık hazırlaması bu pencerede olur */
+      if(e.arm>0.12){
+        const sc=0.07+e.arm*0.17;
+        draw(GEO.sph,M(nm,mT(h.hx,h.hy+0.14,h.hz+0.1),mS(sc,sc,sc)),MU.ELEM[e.el].renk,1);
       }
       continue;
     }
     const ey=eyOf(e);
     const em=M(mT(e.x,ey,e.z),mRy(yaw));
-    const col=EPAL[e.pi][0];
+    const col=MU.ELEM[e.el].renk;   /* hayalet de elementinin rengini taşır */
     /* gövde + hayalet eteği */
     draw(GEO.sph,M(em,mS(0.95,1.05,0.95)),col,0.5);
     draw(GEO.cone,M(em,mT(0,-0.28,0),mRx(Math.PI),mS(0.82,0.6,0.82)),col,0.3);
@@ -799,6 +817,11 @@ function drawEnemies(now){
     /* oyuncuya bakan gözler + boynuzlar */
     draw(GEO.sph,M(em,mT(0.17,0.1,0.36),mS(0.14,0.17,0.07)),EPAL[e.pi][1],1);
     draw(GEO.sph,M(em,mT(-0.17,0.1,0.36),mS(0.14,0.17,0.07)),EPAL[e.pi][1],1);
+    /* TELEGRAF: hayalette önde toplanan küre */
+    if(e.arm>0.12){
+      const sc=0.10+e.arm*0.22;
+      draw(GEO.sph,M(em,mT(0,-0.05,0.62),mS(sc,sc,sc)),col,1);
+    }
     draw(GEO.sph,M(em,mT(0.17,0.08,0.41),mS(0.06,0.09,0.03)),0x102040,0.1);
     draw(GEO.sph,M(em,mT(-0.17,0.08,0.41),mS(0.06,0.09,0.03)),0x102040,0.1);
     draw(GEO.cone,M(em,mT(0.22,0.38,0),mRz(-0.5),mS(0.2,0.42,0.2)),0x14355c,0.15);
@@ -824,10 +847,10 @@ function render(now){
   /* karakterler */
   drawWizard(now,RDT);
   drawEnemies(now);
-  /* mermiler (çekirdek) */
+  /* mermi çekirdekleri: element rengi, güce göre boy — hangi mühür geliyor okunsun */
   for(const s of shots){
-    if(s.friendly) draw(GEO.sph,mModel(s.x,s.y,s.z,0,0.5,0.5,0.5),0xffb347,1);
-    else draw(GEO.sph,mModel(s.x,s.y,s.z,0,0.4,0.4,0.4),0xbb55ff,1);
+    const r=0.20+s.guc*0.09;
+    draw(GEO.sph,mModel(s.x,s.y,s.z,0,r,r,r),MU.ELEM[s.el].renk,1);
   }
   /* gölgeler */
   GL.enable(GL.BLEND);GL.blendFunc(GL.SRC_ALPHA,GL.ONE_MINUS_SRC_ALPHA);GL.depthMask(false);
@@ -838,14 +861,18 @@ function render(now){
   for(const e of enemies){
     /* hayaletin geniş ruh aurası var; ninja etten kemikten → yalnızca ayak dibinde
        kısık bir iz, yoksa katı gövde sisin içinde yüzüyormuş gibi görünüyor */
-    if(e.kind==='ninja') draw(GEO.sph,mModel(e.x,0.35,e.z,0,1.15,0.7,1.15),NPAL[e.pi].ACC,1,0.06);
-    else draw(GEO.sph,mModel(e.x,eyOf(e),e.z,0,2.0,2.1,2.0),EPAL[e.pi][0],1,0.09);
+    const ec=MU.ELEM[e.el].renk;
+    if(e.kind==='ninja') draw(GEO.sph,mModel(e.x,0.35,e.z,0,1.15,0.7,1.15),ec,1,0.06);
+    else draw(GEO.sph,mModel(e.x,eyOf(e),e.z,0,2.0,2.1,2.0),ec,1,0.09);
+    /* can halkası: dolduğu ölçüde geniş — düellonun nerede olduğunu zeminden oku */
+    const co=Math.max(0,e.can)/e.canMax;
+    draw(GEO.torus,M(mT(e.x,0.09,e.z),mS(1.1+co*1.5,1.2,1.1+co*1.5)),ec,1,0.30);
   }
-  for(const s of shots)
-    draw(GEO.sph,mModel(s.x,s.y,s.z,0,s.friendly?1.1:0.85,s.friendly?1.1:0.85,s.friendly?1.1:0.85),s.friendly?0xffa040:0xbb55ff,1,0.4);
-  /* kalkan kubbesi */
-  if(S.blocking)
-    draw(GEO.sph,mModel(P.x,1.1,P.z,0,2.6,2.9,2.6),0x37d6ff,1,0.14+Math.sin(now*0.02)*0.03);
+  for(const s of shots){
+    const r=(0.42+s.guc*0.20)*(s.deldi?1.2:1);
+    draw(GEO.sph,mModel(s.x,s.y,s.z,0,r,r,r),MU.ELEM[s.el].renk,1,0.45);
+    if(s.deldi) draw(GEO.sph,mModel(s.x,s.y,s.z,0,r*1.7,r*1.7,r*1.7),MU.ELEM[s.el].renk,1,0.13);
+  }
   /* kilit göstergesi: hedefin üstünde inen ok + zeminde halka */
   if(LOCK){
     const ly=2.55+Math.sin(now*0.006)*0.12;
@@ -867,23 +894,18 @@ function drawOverlay(now){
     g.addColorStop(0,'rgba(255,40,70,0)');g.addColorStop(1,`rgba(255,40,70,${G.flash*0.55})`);
     ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
   }
-  /* şarj topu — el imleci */
-  if(S.chargeMs>30||S.mode==='charged'){
+  /* yükleme halkası — el imlecinde, becerinin renginde */
+  if(D.beceri){
     const c=S.cursor.ok?S.cursor:{x:W*0.28,y:H*0.75};
-    const prog=S.chargeMs/S.CHARGE_NEED;
-    const r=6+prog*13+Math.sin(now*0.02)*(S.mode==='charged'?3:0);
+    const prog=D.yukTotal?D.yukMs/D.yukTotal:1;
+    const hex='#'+MU.ELEM[D.beceri.el].renk.toString(16).padStart(6,'0');
+    const r=8+prog*14+(prog>=1?Math.sin(now*0.02)*3:0);
     const gr=ctx.createRadialGradient(c.x,c.y,1,c.x,c.y,r*2.6);
-    gr.addColorStop(0,'#fff');gr.addColorStop(0.35,'#ffb347');gr.addColorStop(1,'rgba(255,80,40,0)');
+    gr.addColorStop(0,'#fff');gr.addColorStop(0.35,hex);gr.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=gr;ctx.beginPath();ctx.arc(c.x,c.y,r*2.6,0,6.28);ctx.fill();
-    if(S.mode!=='charged'){
-      ctx.strokeStyle='rgba(255,210,120,.9)';ctx.lineWidth=3;
+    if(prog<1){
+      ctx.strokeStyle=hex;ctx.lineWidth=3;
       ctx.beginPath();ctx.arc(c.x,c.y,r+10,-Math.PI/2,-Math.PI/2+prog*6.28);ctx.stroke();}
-  }
-  /* kalkan vinyeti */
-  if(S.blocking){
-    const g=ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.75);
-    g.addColorStop(0,'rgba(55,214,255,0)');g.addColorStop(1,'rgba(55,214,255,0.2)');
-    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
   }
   /* joistik */
   if(J.active){
@@ -908,10 +930,10 @@ function endGame(){
   setStatus('');
 }
 function resetGame(){
-  G.score=0;scoreEl.textContent='0';G.hearts=5;heartsDraw();
+  G.score=0;scoreEl.textContent='0';G.can=OY_CAN;canCiz();
   enemies.length=0;shots.length=0;fx.length=0;
   P.x=0;P.z=0;P.yaw=0;P.targetYaw=0;camYaw=0;camX=0;camY=4.6;camZ=-8;
-  S.mode='idle';S.ammo=0;S.chargeMs=0;S.palmMs=0;S.shield=1;S.shieldLock=false;S.blocking=false;
+  cancelSpell();S.simPoz=null;
   G.over=false;G.running=true;G.spawnT=2.2;G.flash=0;
 }
 function retry(){ if(!G.over||performance.now()-overAt<600) return;
@@ -960,15 +982,13 @@ function tick(){
   const dt=Math.min(0.05,(now-lastT)/1000);lastT=now;G.t=now;RDT=dt;
   if(G.running){
     updateLock();
-    const pose=readHand(now);
-    updateSpell(pose,dt*1000,now);
+    const pozId=readHand(now);
+    updateSpell(pozId,dt*1000,now);
     updatePlayer(dt);
     updateEnemies(dt,now);
     updateShots(dt);
     updateFx(dt);
     updateCamera(dt);
-    const at='🔥'.repeat(S.ammo);
-    if(ammoEl.textContent!==at)ammoEl.textContent=at;
   }
   render(now);
   drawOverlay(now);
