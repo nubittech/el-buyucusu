@@ -100,7 +100,7 @@ canvas{touch-action:none}
   <button class="bigbtn" id="retryBtn">Tekrar Dene</button>
 </div>
 
-<script src="muhur.js?v=12"></script>
+<script src="muhur.js?v=14"></script>
 <script>
 'use strict';
 /* =============================================================
@@ -349,14 +349,20 @@ function spawnEnemy(){
   const z=side===2?-AR+3:side===3?AR-3:(side<2?t:AR-3);
   /* iki tip: süzülen hayalet · yerde koşan ninja (oyuncuyla aynı iskelet, düşman paleti).
      Ninja daha çevik ve daha yakından taciz eder; hayalet yavaş ve uzaktan atar. */
-  const ninja=Math.random()<0.45;
-  /* Her düşmanın SABİT bir elementi var ve rengiyle belli ediyor — oyuncu daha
-     çarpışma başlamadan hangi elementle karşılık vereceğini bilsin. */
+  /* Üç tip. Usta yalnız oyuncu biraz ilerleyince geliyor — açılıştaki ilk
+     düşman hep okunabilir olsun. */
+  const ustaOlabilir=G.score>=30;
+  const r=Math.random();
+  const tip = (ustaOlabilir&&r<0.25) ? 'usta' : (r<0.62?'ninja':'hayalet');
   const el=EL_IDS[Math.floor(Math.random()*EL_IDS.length)];
-  const e={x,z,kind:ninja?'ninja':'ghost',arm:0,el,
-    can:EN_CAN,canMax:EN_CAN,
-    sp:(2.2+Math.random()*1.4)*(ninja?1.35:1),
+  const e={x,z,tip,kind:tip==='hayalet'?'ghost':'ninja',arm:0,el,
+    can:EN_CAN,canMax:EN_CAN,telegraf:0,durum:'yaklas',
+    sp:(2.2+Math.random()*1.4)*(tip==='hayalet'?1:1.35)*(tip==='usta'?1.15:1),
     cd:2.2+Math.random()*1.4,
+    bekle: tip==='usta'?2.4:3.0,          /* atışlar arası temel bekleme */
+    guc:   tip==='usta'?1.35:1.0,         /* usta daha güçlü mühür atar */
+    siperSever: tip!=='hayalet',          /* hayalet süzülür, siper kullanmaz */
+    eller: [el, MU.YENER[el]], degisT:2+Math.random()*2, degisim:0,
     ss:Math.random()<0.5?-1:1,bob:Math.random()*6,pi:Math.floor(Math.random()*3)};
   pushOut(e,0.6);enemies.push(e);
 }
@@ -532,6 +538,7 @@ function ates(beceri){
   else { dx=Math.sin(P.yaw);dy=-0.05;dz=Math.cos(P.yaw); }
   const dl=Math.hypot(dx,dy,dz)||1;
   fire(sx,sy,sz,dx/dl,dy/dl,dz/dl,beceri.el,beceri.kat,'oyuncu',LOCK);
+  oyuncuAtti(beceri.el);
 }
 function cizMuhur(){
   /* şu an okunan poz en solda, sönük: elin ne verdiğini anlık görebilesin */
@@ -554,7 +561,7 @@ function cizMuhur(){
     skillSubEl.textContent=D.son||'';
   } else { skillNowEl.textContent='';skillSubEl.textContent=''; }
 }
-function cancelSpell(){ MU.diziSifirla(D);D.beceri=null;D.yukMs=0;D.aday=null;D.kilitMs=0; }
+function cancelSpell(){ MU.diziSifirla(D);D.beceri=null;D.yukMs=0;D.aday=null;D.kilitMs=0;D.onayli=null;D.oylar.length=0; }
 function setSpellStatus(){
   if(G.over) return;
   if(!S.camMode){ setStatus('Mühür butonlarını basılı tut → 👉 ile kapat'); return; }
@@ -597,41 +604,105 @@ function updateCamera(dt){
   let fx=P.x-camX,fy=1.5-camY,fz=P.z-camZ;
   const fl=Math.hypot(fx,fy,fz)||1;camFx=fx/fl;camFy=fy/fl;camFz=fz/fl;
 }
+/* Oyuncunun element alışkanlığı — usta düşman buna göre karşılık seçer.
+   Sadece son atışlar sayılır ki oyuncu tarz değiştirince düşman da uyum sağlasın. */
+const oySayac={};
+function oyuncuAtti(el){ for(const k in oySayac) oySayac[k]*=0.85; oySayac[el]=(oySayac[el]||0)+1; }
+function oyuncuFavori(){
+  let en=null,n=0.8;                       /* eşik: birkaç atış görmeden karar verme */
+  for(const k in oySayac) if(oySayac[k]>n){n=oySayac[k];en=k;}
+  return en;
+}
+/* Siper noktası: oyuncuyla arasına engel girecek biçimde engelin arka yüzü.
+   Düşmanın oyuncunun şarjını gördüğünde kaçtığı yer burası. */
+function siperNoktasi(e){
+  let iyi=null,iyiD=1e9;
+  for(const b of OBS){
+    if(b.h<1.4) continue;                                  /* alçak engel siper sayılmaz */
+    const cx=(b.minx+b.maxx)/2, cz=(b.minz+b.maxz)/2;
+    const gx=cx-P.x, gz=cz-P.z, gl=Math.hypot(gx,gz)||1;
+    if(gl>22) continue;
+    const yari=Math.max(b.maxx-b.minx,b.maxz-b.minz)/2+1.1;
+    const hx=cx+gx/gl*yari, hz=cz+gz/gl*yari;              /* engelin oyuncudan uzak yüzü */
+    if(Math.abs(hx)>AR-1||Math.abs(hz)>AR-1) continue;
+    if(hasLOS(hx,hz,P.x,P.z,1.15)) continue;               /* gerçekten kapatmıyorsa boş ver */
+    const d=Math.hypot(hx-e.x,hz-e.z);
+    if(d<iyiD){iyiD=d;iyi={x:hx,z:hz,d};}
+  }
+  return iyi;
+}
 function updateEnemies(dt,now){
   /* Spam yok: en fazla MAX_DUSMAN, ve yeni düşman ancak arada boşluk varken gelir. */
   G.spawnT-=dt;
   if(G.spawnT<=0&&enemies.length<MAX_DUSMAN){ spawnEnemy(); G.spawnT=2.5+Math.random()*1.8; }
+
+  /* oyuncu şarjlı mı — düşmanın sipere kaçma sebebi bu */
+  const oyuncuHazir = !!(D.beceri && D.yukMs>=D.yukTotal);
+  const oyuncuSarjda = !!D.beceri;
+
   for(let i=enemies.length-1;i>=0;i--){const e=enemies[i];
     e.bob+=dt*3;
     const dx=P.x-e.x,dz=P.z-e.z,d=Math.hypot(dx,dz)||1e-4;
     const ux=dx/d,uz=dz/d;
     const los=hasLOS(e.x,e.z,P.x,P.z,1.15);
-    /* ninja daha yakın bir kuşakta dolanır: baskı kurar, hayalet mesafeyi korur */
-    const far=e.kind==='ninja'?9.5:13, near=e.kind==='ninja'?4.2:6.5;
-    let mx=0,mz=0;
-    if(!los){mx=ux;mz=uz;}
-    else if(d>far){mx=ux;mz=uz;}
-    else if(d<near){mx=-ux;mz=-uz;}
-    else {mx=-uz*e.ss;mz=ux*e.ss;if(Math.random()<0.004)e.ss*=-1;}
-    e.x+=mx*e.sp*dt;e.z+=mz*e.sp*dt;
+    e.cd-=dt;
+
+    /* --- USTA: iki elementi var, oyuncunun favorisini yenen elemente geçer --- */
+    if(e.tip==='usta'){
+      e.degisT-=dt;
+      if(e.degisT<=0&&e.cd>0.7){
+        const fav=oyuncuFavori();
+        const hedef = fav ? MU.YENILIR[fav] : e.eller[(Math.random()*e.eller.length)|0];
+        if(hedef&&hedef!==e.el){ e.el=hedef; e.degisim=1; }
+        e.degisT=2.2+Math.random()*1.5;
+      }
+      e.degisim=Math.max(0,e.degisim-dt*2);
+    }
+
+    /* --- DAVRANIŞ DURUMU --- */
+    const yakin=e.tip==='hayalet'?6.5:4.2, uzak=e.tip==='hayalet'?13:9.5;
+    let durum;
+    if(!los) durum='yaklas';
+    else if(e.cd<TELEGRAF/1000) durum='hazirlan';        /* atış yaklaştı: dur ve nişan al */
+    else if(oyuncuHazir&&e.siperSever) durum='siper';    /* oyuncu ateşe hazır: kaçış */
+    else if(d>uzak) durum='yaklas';
+    else if(d<yakin) durum='uzaklas';
+    else durum='dolan';
+    e.durum=durum;
+
+    let mx=0,mz=0,hiz=e.sp;
+    if(durum==='yaklas'){ mx=ux;mz=uz; }
+    else if(durum==='uzaklas'){ mx=-ux;mz=-uz; }
+    else if(durum==='dolan'){ mx=-uz*e.ss;mz=ux*e.ss; if(Math.random()<0.004)e.ss*=-1; }
+    else if(durum==='hazirlan'){ hiz*=0.25; mx=-uz*e.ss*0.4;mz=ux*e.ss*0.4; }  /* nişan alırken yavaşlar */
+    else if(durum==='siper'){
+      const sp2=siperNoktasi(e);
+      if(sp2&&sp2.d>0.8){ const l=sp2.d||1; mx=(sp2.x-e.x)/l; mz=(sp2.z-e.z)/l; hiz*=1.25; }
+      else { mx=-uz*e.ss;mz=ux*e.ss; }                   /* siper yoksa yandan kaç */
+    }
+    e.x+=mx*hiz*dt;e.z+=mz*hiz*dt;
     pushOut(e,0.6);
-    /* yakın temas: artık kamikaze değil, sıyırma hasarı — düello uzun sürsün */
+
+    /* yakın temas: sıyırma hasarı — düello uzun sürsün */
     if(d<1.05){
       boom(e.x,1.1,e.z,1.0,MU.ELEM[e.el].renk);
       hasarAl(6); e.x-=ux*1.6; e.z-=uz*1.6; pushOut(e,0.6);
       continue;
     }
-    e.cd-=dt;
     /* TELEGRAF: atıştan TELEGRAF ms önce kol kalkar ve elde element rengi toplanır.
        Oyuncunun okuyup karşılık yetiştirebileceği pencere tam olarak burası. */
-    const hazirlan = los && d<20 && e.cd<TELEGRAF/1000;
-    e.arm += ((hazirlan?1:0)-e.arm)*Math.min(1,dt*7);
+    e.telegraf = (los&&d<20) ? Math.max(0,1-Math.max(0,e.cd)/(TELEGRAF/1000)) : 0;
+    e.arm += ((e.telegraf>0.02?1:0)-e.arm)*Math.min(1,dt*7);
+
     if(e.cd<=0&&los&&d<20){
       const my=muzzleY(e);
       let sx=P.x-e.x,sy=1.05-my,sz2=P.z-e.z;
       const sl=Math.hypot(sx,sy,sz2)||1;
-      fire(e.x,my,e.z,sx/sl,sy/sl,sz2/sl,e.el,1.0,e,null);
-      e.cd=3.0+Math.random()*1.6;
+      fire(e.x,my,e.z,sx/sl,sy/sl,sz2/sl,e.el,e.guc,e,null);
+      e.cd=e.bekle*(0.85+Math.random()*0.35);
+      if(e.siperSever) e.cd=Math.max(e.cd,1.6);          /* atıştan sonra sipere çekilecek zaman */
+    } else if(e.cd<=0&&!los){
+      e.cd=0.35;                                          /* görüş yoksa boşuna bekleme */
     }
   }
 }
@@ -801,7 +872,15 @@ function drawEnemies(now){
     if(e.kind==='ninja'){
       const run=Math.sin(ninjaStride(e));
       const nm=M(mT(e.x,ninjaBobY(e),e.z),mRy(yaw),mRx(0.12));
-      const h=drawNinja(nm,NPAL[e.pi],run,e.arm,e.bob*0.55);
+      const pal=e.tip==='usta'
+        ? {...NPAL[e.pi],ACC:MU.ELEM[e.el].renk,GOLD:0xffd166,eyeGlow:1,EYE:MU.ELEM[e.el].renk}
+        : NPAL[e.pi];
+      const h=drawNinja(nm,pal,run,e.arm,e.bob*0.55);
+      if(e.tip==='usta'){                       /* usta: omuz üstünde iki yüzen küre */
+        for(const yon of [-1,1])
+          draw(GEO.sph,M(nm,mT(yon*0.5,1.75+Math.sin(now*0.004+yon)*0.06,0),mS(0.13,0.13,0.13)),
+               MU.ELEM[e.el].renk,1);
+      }
       /* TELEGRAF: atıştan önce elde elementin rengi toplanır — oyuncunun
          hangi elementin geldiğini okuyup karşılık hazırlaması bu pencerede olur */
       if(e.arm>0.12){
@@ -920,6 +999,28 @@ function cizDusmanCan(){
     if(o>0){ctx.beginPath();ctx.roundRect(x,y,w*o,h,3);ctx.fill();}
     ctx.font='13px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';
     ctx.fillText(MU.BY[e.el].el,p.x,y-5);
+    /* TELEGRAF YAYI: atışa kalan süre, elementin renginde bir halka olarak dolar.
+       Oyuncunun karşılık yetiştirmesi için okunması gereken tek şey bu. */
+    if(e.telegraf>0.02){
+      const cy=y-13, R=13;
+      ctx.lineWidth=3;ctx.lineCap='round';
+      ctx.strokeStyle='rgba(255,255,255,.18)';
+      ctx.beginPath();ctx.arc(p.x,cy,R,0,6.283);ctx.stroke();
+      ctx.strokeStyle='#'+MU.ELEM[e.el].renk.toString(16).padStart(6,'0');
+      ctx.beginPath();ctx.arc(p.x,cy,R,-Math.PI/2,-Math.PI/2+e.telegraf*6.283);ctx.stroke();
+      if(e.telegraf>0.82){                       /* son an: uyarı parlaması */
+        ctx.globalAlpha=sol*(0.35+Math.sin(performance.now()*0.03)*0.25);
+        ctx.beginPath();ctx.arc(p.x,cy,R+4,0,6.283);ctx.stroke();
+        ctx.globalAlpha=sol;
+      }
+    }
+    /* usta element değiştirdiyse kısa bir uyarı */
+    if(e.degisim>0.05){
+      ctx.globalAlpha=sol*e.degisim;
+      ctx.font='bold 11px sans-serif';ctx.fillStyle='#fff';
+      ctx.fillText('element değişti',p.x,y-32);
+      ctx.globalAlpha=sol;
+    }
     ctx.globalAlpha=1;
   }
 }

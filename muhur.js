@@ -239,9 +239,15 @@ function yeniDizi(){
    pencerede en az KILIT_MS önce başlamış olması. Süre şartı olmazsa kazara
    bir anlık poz da tetikler; çoğunluk şartı olmazsa hareket hâlindeki
    dağınık kayıplar pozu hiç onaylatmaz. İkisi birlikte gerekiyor. */
+const OY_TAVAN=64;                 /* ~1 sn @60fps — hiçbir koşulda üstüne çıkmasın */
 function oyla(D,id,now){
   D.oylar.push({id,t:now});
-  while(D.oylar.length&&now-D.oylar[0].t>OY_MS) D.oylar.shift();
+  /* Budama yalnız "çok eski" koşuluna bağlıydı; saat geriye giderse (kayıtta
+     ileri sarılmış zaman damgaları, sistem saati düzeltmesi) koşul hiç sağlanmaz
+     ve tampon sınırsız büyür — oylama da çöker. Gelecek damgaları da at, ve
+     her hâlükârda bir tavan uygula. */
+  while(D.oylar.length&&(now-D.oylar[0].t>OY_MS||D.oylar[0].t>now+1)) D.oylar.shift();
+  while(D.oylar.length>OY_TAVAN) D.oylar.shift();
   const say={},ilk={},sonT={}; let en=null,enN=0;
   for(const o of D.oylar){ if(!o.id) continue;
     say[o.id]=(say[o.id]||0)+1;
