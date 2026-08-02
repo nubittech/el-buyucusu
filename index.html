@@ -90,7 +90,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v7.2 · arena düzeni · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v7.3 · doku + kamera · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -188,7 +188,7 @@ const statusEl=document.getElementById('status'), scoreEl=document.getElementByI
 const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById('hpLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v7.2 · arena düzeni · motor hazır ✓';
+document.getElementById('subLine').textContent='v7.3 · doku + kamera · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -246,7 +246,7 @@ function fircaDokusuUret(boy){
      10/255 çıkıyordu, yani yüzeyde ±%2 — hiç görünmüyordu. */
   const KATMAN=[[260,[0.16,0.55],[10,26],0.16],
                 [900,[0.06,0.26],[3.5,11],0.13],
-                [1700,[0.02,0.10],[1.0,3.2],0.10]];
+                [ 900,[0.03,0.12],[1.8,4.2],0.07]];
   for(const[adet,boyAr,kalAr,aMax]of KATMAN){
     for(let i=0;i<adet;i++){
       const uz=boy*(boyAr[0]+rnd()*(boyAr[1]-boyAr[0]));
@@ -298,6 +298,7 @@ uniform sampler2D uFirca; uniform vec2 uFircaOlcek;   /* .x ince, .y kaba katman
 uniform float uKar;        /* bu nesne ne kadar kar tutar (0 hiç, 1 tamamen) */
 uniform vec3 uKarRenk;
 uniform float uParilti;    /* kar kristali kıvılcımı */
+uniform float uDoku;       /* yüzeyin fırça payı: kaya 1, kar düşük */
 /* GUAJ GÖRÜNÜMÜ — doku yok, üç şeyle yapılıyor:
    1) BANTLAMA: sürekli gradyan yerine üç ton kademesi. Suluboya/guaj resimlerde
       ton grupları düz durur, aradaki geçiş dardır.
@@ -321,10 +322,19 @@ void main(){
   float f1=firca(vW,n,uFircaOlcek.x);
   float f2=firca(vW,n,uFircaOlcek.y);
   float fr=(f1*0.62+f2*0.38);
+  /* MESAFEYLE SÖNME: zemin 300 birim uzanıyor, ince katman 5.9 birimde bir
+     tekrarlıyor — uzakta ekranda piksel altına düşüp parazite dönüyordu.
+     Yakında doku tam, uzakta düz renk: hem gürültü gidiyor hem hava
+     perspektifiyle tutarlı (uzaktaki yüzeyin dokusu zaten seçilmez). */
+  /* uDoku: KAR pürüzsüz olmalı, KAYA dokulu. Tek katsayı ikisine birden
+     uyduğunda ya kaya düz ya kar kirli çıkıyordu. */
+  float dokuGuc=uDoku*(1.0-smoothstep(9.0,32.0,distance(vW,uCam)));
+  fr=mix(0.5,fr,dokuGuc);
+  f2=mix(0.5,f2,dokuGuc);
   /* ASIL HİLE: bantlamadan ÖNCE aydınlanmayı fırçayla bozuyoruz. Böylece ışık–
      gölge sınırı düzgün bir yay olmaktan çıkıp darbeler boyunca dalgalanıyor —
      guaj resimlerdeki düzensiz ton sınırının kaynağı bu. */
-  dif=clamp(dif+(fr-0.5)*0.62,0.0,1.0);
+  dif=clamp(dif+(fr-0.5)*0.34,0.0,1.0);
   /* üç kademe, geçişleri dar tutulmuş */
   float b=smoothstep(0.20,0.27,dif)*0.34
          +smoothstep(0.48,0.55,dif)*0.34
@@ -337,10 +347,10 @@ void main(){
      eski 0.28 katsayısıyla parlaklık yalnız ±%3 oynuyordu — görünmüyordu.
      0.54 ile 1σ'da ±%6, uçtan uca ±%27: darbe okunuyor ama gürültüye
      dönüşmüyor. */
-  col*=0.74+fr*0.54;
+  col*=0.88+fr*0.26;
   /* Guajın ikinci imzası: aynı yüzeyde farklı boya karışımları. Kaba katman
      lekeleri sıcağa/soğuğa kaydırıyor — düz çarpım tek renkli kalıyordu. */
-  col*=mix(vec3(0.93,0.97,1.07),vec3(1.07,1.02,0.94),f2);
+  col*=mix(vec3(0.96,0.98,1.04),vec3(1.04,1.01,0.97),f2);
   /* --- KAR BİRİKİMİ ---------------------------------------------------------
      Karlı sahnede hacmi okutan asıl şey: yukarı bakan yüzeyler kar tutar,
      yan yüzeyler malzemeyi gösterir. Tek renk + bant ile kaya "gri kütle"
@@ -375,7 +385,7 @@ GL.linkProgram(prog);
 if(!GL.getProgramParameter(prog,GL.LINK_STATUS)) throw new Error(GL.getProgramInfoLog(prog));
 GL.useProgram(prog);
 const U={}, A={};
-['uM','uV','uPr','uColor','uEmiss','uAlpha','uCam','uFogCol','uFogR','uLight','uWarm','uCool','uFirca','uFircaOlcek','uKar','uKarRenk','uParilti'].forEach(n=>U[n]=GL.getUniformLocation(prog,n));
+['uM','uV','uPr','uColor','uEmiss','uAlpha','uCam','uFogCol','uFogR','uLight','uWarm','uCool','uFirca','uFircaOlcek','uKar','uKarRenk','uParilti','uDoku'].forEach(n=>U[n]=GL.getUniformLocation(prog,n));
 ['aP','aN'].forEach(n=>{A[n]=GL.getAttribLocation(prog,n);GL.enableVertexAttribArray(A[n]);});
 GL.enable(GL.DEPTH_TEST);
 /* Yüksek anahtarlı kar paleti: sis rengi = gökyüzü rengi, ikisi aynı olunca
@@ -399,9 +409,20 @@ GL.uniform3f(U.uCool,...TEMA.golge);  /* gölge tonu — karartma değil renk ka
   GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MIN_FILTER,GL.LINEAR_MIPMAP_LINEAR);
   GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MAG_FILTER,GL.LINEAR);
   GL.generateMipmap(GL.TEXTURE_2D);
-  GL.activeTexture(GL.TEXTURE0);GL.bindTexture(GL.TEXTURE_2D,tex);
-  GL.uniform1i(U.uFirca,0);
-  GL.uniform2f(U.uFircaOlcek,0.42,0.095);   /* ince darbe · kaba leke */
+  /* FIRÇA 3. BİRİMDE, 0'DA DEĞİL.
+     0'daydı ve görünmüyordu: dokuYap() her yeni sahne dokusunu O ANKİ aktif
+     birime bağlıyor, açılıştaki ilk boyutAyarla ise aktif birim 0 iken
+     çalışıyor — fırçayı söküp yerine boş bir render hedefi bırakıyordu.
+     texture2D siyah dönüyordu (fr=0), yani doku hiç uygulanmıyordu ve
+     üretecinde yapılan bütün ayarlar boşa gidiyordu. 3. birime hiçbir şey
+     dokunmuyor (bloom 1 ve 2'yi, dokuYap 0'ı kullanıyor). */
+  GL.activeTexture(GL.TEXTURE3);GL.bindTexture(GL.TEXTURE_2D,tex);
+  GL.uniform1i(U.uFirca,3);
+  GL.activeTexture(GL.TEXTURE0);            /* 0'ı çalışma birimi olarak bırak */
+  /* Ölçekler KABALAŞTIRILDI. 0.42 ince katmanı 2.4 birimde bir tekrarlıyordu;
+     doku gerçekten bağlanınca bu zeminde parazit gibi çıktı. 0.17 → 5.9
+     birim: fırça darbesi okunuyor, benek olmuyor. */
+  GL.uniform2f(U.uFircaOlcek,0.17,0.042);   /* ince darbe · kaba leke */
 }
 
 /* =============================================================
@@ -835,25 +856,43 @@ function torusGeo(su,sv,rr){ /* ana yarıçap .5 */
 /* --- ÇAM: dört kademe koni, tek mesh (gövde ayrı silindirle çiziliyor) ------
    Arenayı çevreleyen "ağaçlar" ince silindirdi ve direk gibi duruyordu. Siluet
    üslubun yarısı: koni yığını uzaktan bile çam okunuyor, silindir okunmuyor. */
-function camGeo(){
+function camGeo(seed){
+  let s=seed>>>0; const rnd=()=>((s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff);
   const p=[],n=[],ix=[];
-  const koni=(y0,h,r,seg)=>{
-    const b=p.length/3, nl=Math.hypot(h,r);
-    for(let j=0;j<=seg;j++){
-      const a=j/seg*6.283185,cx=Math.cos(a),cz=Math.sin(a);
-      const nx=cx*h/nl,ny=r/nl,nz=cz*h/nl;
-      p.push(cx*r,y0,cz*r);   n.push(nx,ny,nz);
-      p.push(0,y0+h,0);       n.push(nx,ny,nz);
-    }
-    for(let j=0;j<seg;j++){const a=b+j*2;ix.push(a,a+1,a+2);}
-    /* etek: alttan bakınca koni içi boş görünmesin */
-    const c0=p.length/3;
-    for(let j=0;j<=seg;j++){const a=j/seg*6.283185;p.push(Math.cos(a)*r,y0,Math.sin(a)*r);n.push(0,-1,0);}
-    p.push(0,y0,0);n.push(0,-1,0);const c=p.length/3-1;
-    for(let j=0;j<seg;j++)ix.push(c0+j,c,c0+j+1);
+  const yuz=(a,b,c)=>{
+    const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2];
+    const vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+    let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+    const l=Math.hypot(nx,ny,nz)||1;
+    const b0=p.length/3;
+    [a,b,c].forEach(v=>{p.push(v[0],v[1],v[2]);n.push(nx/l,ny/l,nz/l);});
+    ix.push(b0,b0+1,b0+2);
   };
-  koni(0.14,0.36,0.250,9); koni(0.36,0.31,0.196,9);
-  koni(0.56,0.28,0.146,9); koni(0.75,0.25,0.096,9);
+  /* İlk sürüm dört KUSURSUZ iç içe koniydi — silueti pürüzsüz, oranları sabit
+     ve bütün ağaçlar birbirinin aynısıydı; parti şapkası gibi okunuyordu.
+     Burada her dal katmanının taban halkasında köşe başına yarıçap gürültüsü
+     var (±%35), tepe merkezden kaymış, katman aralıkları düzensiz ve alt
+     dallar sarkıyor. Silueti tırtıklı yapan şey bu. */
+  const KAT=5+Math.floor(rnd()*3);
+  let y=0.10, r=0.25+rnd()*0.07;
+  for(let k=0;k<KAT;k++){
+    const t=k/(KAT-1), seg=8;
+    const h=(0.32-t*0.12)*(0.85+rnd()*0.32);
+    const halka=[];
+    for(let j=0;j<seg;j++){
+      const a=j/seg*6.283185;
+      const rj=r*(0.66+rnd()*0.62);
+      const sark=(1-t)*rj*0.30*rnd();          /* alt dallar aşağı sarkıyor */
+      halka.push([Math.cos(a)*rj, y-sark, Math.sin(a)*rj]);
+    }
+    const tepe=[(rnd()-0.5)*r*0.24, y+h, (rnd()-0.5)*r*0.24];
+    /* sıra j+1 → j → tepe: dışa+yukarı bakan normal (j → j+1 içe bakıyor) */
+    for(let j=0;j<seg;j++) yuz(halka[(j+1)%seg],halka[j],tepe);
+    const mrk=[0,y,0];
+    for(let j=0;j<seg;j++) yuz(halka[j],halka[(j+1)%seg],mrk);   /* etek, -y */
+    y+=h*(0.50+rnd()*0.18);                    /* katmanlar üst üste biniyor */
+    r*=0.74+rnd()*0.17;
+  }
   return mesh(p,n,ix);
 }
 /* --- KAYA: bozulmuş küre, düz gölgelemeli ---------------------------------
@@ -920,7 +959,11 @@ function kayaGeo(seed,puruz){
 function yaylaGeo(seed,kenar,kademe){
   let s=seed>>>0; const rnd=()=>((s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff);
   const p=[],n=[],ix=[];
-  const R=[]; for(let j=0;j<kenar;j++) R.push(0.36+rnd()*0.15);   /* düzensiz çokgen */
+  /* Yarıçap dağılımı GENİŞ. İlk sürümde 0.36–0.51 idi (±%17) ve çokgen
+     neredeyse düzgün çıkıyordu; radyal simetrik, düzgün daralan prizma kaya
+     değil ağaç kütüğü gibi okunuyordu. 0.24–0.54 ile aynı taşın bir yüzü
+     diğerinin iki katı olabiliyor. */
+  const R=[]; for(let j=0;j<kenar;j++) R.push(0.24+rnd()*0.30);
   const yuz=(vs)=>{
     const a=vs[0],b=vs[1],c=vs[2];
     const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2];
@@ -933,24 +976,33 @@ function yaylaGeo(seed,kenar,kademe){
   };
   const P=(j,ss,xx,zz)=>{const a=j/kenar*6.283185;
     return [Math.cos(a)*R[j]*ss+xx, Math.sin(a)*R[j]*ss+zz];};
-  let y=0, sc=1, ox=0, oz=0;
+  let y=0, sc=1, ox=0, oz=0, ax=0, az=0;   /* ax/az: o kademenin üst düzlem eğimi */
   for(let k=0;k<kademe;k++){
     const h=(1/kademe)*(1.18-k*0.14);
-    const scU=sc*(0.84-rnd()*0.12);
-    const nox=ox+(rnd()-0.5)*0.09, noz=oz+(rnd()-0.5)*0.09;   /* kademe kayması */
+    /* ÇIKINTI: kademe her zaman daralmıyor. rnd<0.28 ise genişliyor ve taş
+       sarkan bir çıkıntı kazanıyor — konik yığında hiç olmayan şey buydu. */
+    const scU=sc*(rnd()<0.28 ? 1.02+rnd()*0.14 : 0.70-rnd()*0.18);
+    /* YAN KAYMA: ±0.09 çok azdı, kütle hep dik duruyordu. ±0.22 ile taş yatıyor. */
+    const nox=ox+(rnd()-0.5)*0.22, noz=oz+(rnd()-0.5)*0.22;
+    /* EĞİK ÜST DÜZLEM: referanstaki mesa dilimlerinin hepsi eğik. Yatay
+       kapak "kesilmiş" duruyor, eğik olan kırılmış kaya gibi. */
+    const nax=(rnd()-0.5)*0.85, naz=(rnd()-0.5)*0.85;
+    const ustY=(x,z)=>y+h+nax*(x-nox)+naz*(z-noz);
+    const altY=(x,z)=> k===0 ? 0 : y+ax*(x-ox)+az*(z-oz);
     for(let j=0;j<kenar;j++){
       const j2=(j+1)%kenar;
       const a=P(j,sc,ox,oz),  b=P(j2,sc,ox,oz);
       const c=P(j2,scU,nox,noz), d=P(j,scU,nox,noz);
       /* sıra a→d→c→b: dışa bakan normal. a→b→c→d içe bakıyor. */
-      yuz([[a[0],y,a[1]],[d[0],y+h,d[1]],[c[0],y+h,c[1]],[b[0],y,b[1]]]);
+      yuz([[a[0],altY(a[0],a[1]),a[1]],[d[0],ustY(d[0],d[1]),d[1]],
+           [c[0],ustY(c[0],c[1]),c[1]],[b[0],altY(b[0],b[1]),b[1]]]);
     }
     /* Her kademenin kendi üst kapağı var — görünen sahanlıkları o yapıyor.
        Ters sırada: açı yönünde saymak -y normal veriyor. */
     const kapak=[];
-    for(let j=kenar-1;j>=0;j--){const v=P(j,scU,nox,noz);kapak.push([v[0],y+h,v[1]]);}
+    for(let j=kenar-1;j>=0;j--){const v=P(j,scU,nox,noz);kapak.push([v[0],ustY(v[0],v[1]),v[1]]);}
     yuz(kapak);
-    y+=h; sc=scU; ox=nox; oz=noz;
+    y+=h; sc=scU; ox=nox; oz=noz; ax=nax; az=naz;
   }
   return mesh(p,n,ix);
 }
@@ -1014,7 +1066,10 @@ function sirtGeo(seed,yari,altY,ustY,seg,sivri){
   return mesh(p,n,ix);
 }
 const GEO={box:boxGeo(),sph:sphereGeo(11,15),cone:coneGeo(12),cyl:cylGeo(12),disc:discGeo(14),
-  torus:torusGeo(14,8,0.14),cam:camGeo(),
+  torus:torusGeo(14,8,0.14),
+  /* Beş farklı ağaç: tek mesh 130 kez tekrarlanınca orman kopyala-yapıştır
+     görünüyordu, düzensiz siluetin anlamı kalmıyordu. */
+  cam:[camGeo(0x3311),camGeo(0x8f42),camGeo(0xc0de),camGeo(0x1e55),camGeo(0xa77b)],
   /* Pürüz yüksek: kaba oktav komşularıyla yumuşatıldığı için genliğin bir
      kısmını kaybediyor. Düşük değerlerde hepsi aynı yuvarlak somuna dönüyordu. */
   kaya:[kayaGeo(0x51f3,1.05),kayaGeo(0x9ac1,1.25),kayaGeo(0x2e77,0.90),kayaGeo(0xbb40,1.15)],
@@ -1052,14 +1107,14 @@ function birlestir(liste){
   for(const s of liste){
     /* kar ve parıltı da anahtara giriyor: aynı renkte ama farklı kar tutan
        yüzeyler (gövde vs tepe) tek meshe girerse ikisi de yanlış görünür */
-    const k=[s.color,s.emiss||0,s.kar||0,s.parilti||0].join('|');
-    if(!grup.has(k)) grup.set(k,{color:s.color,emiss:s.emiss||0,kar:s.kar||0,parilti:s.parilti||0,parca:[]});
+    const k=[s.color,s.emiss||0,s.kar||0,s.parilti||0,s.doku===undefined?1:s.doku].join('|');
+    if(!grup.has(k)) grup.set(k,{color:s.color,emiss:s.emiss||0,kar:s.kar||0,parilti:s.parilti||0,doku:s.doku===undefined?1:s.doku,parca:[]});
     grup.get(k).parca.push(s);
   }
   const cikti=[];
   for(const g of grup.values()){
     let p=[],n=[],ix=[];
-    const bosalt=()=>{ if(ix.length) cikti.push({geo:mesh(p,n,ix),model:BIRIM,color:g.color,emiss:g.emiss,kar:g.kar,parilti:g.parilti}); p=[];n=[];ix=[]; };
+    const bosalt=()=>{ if(ix.length) cikti.push({geo:mesh(p,n,ix),model:BIRIM,color:g.color,emiss:g.emiss,kar:g.kar,parilti:g.parilti,doku:g.doku}); p=[];n=[];ix=[]; };
     for(const s of g.parca){
       const src=s.geo, m=s.model, nm=m3tersDevrik(m), vs=src.p.length/3;
       /* Uint16 indeks sınırı: dolmadan önce parçayı kapat */
@@ -1081,11 +1136,12 @@ function birlestir(liste){
   }
   return cikti;
 }
-function draw(geo,model,color,emiss,alpha,kar,parilti){
+function draw(geo,model,color,emiss,alpha,kar,parilti,doku){
   GL.uniformMatrix4fv(U.uM,false,model);
   GL.uniform3f(U.uColor,(color>>16&255)/255,(color>>8&255)/255,(color&255)/255);
   GL.uniform1f(U.uEmiss,emiss||0);GL.uniform1f(U.uAlpha,alpha===undefined?1:alpha);
   GL.uniform1f(U.uKar,kar||0);GL.uniform1f(U.uParilti,parilti||0);
+  GL.uniform1f(U.uDoku,doku===undefined?1:doku);
   GL.bindBuffer(GL.ARRAY_BUFFER,geo.vb);GL.vertexAttribPointer(A.aP,3,GL.FLOAT,false,0,0);
   GL.bindBuffer(GL.ARRAY_BUFFER,geo.nb);GL.vertexAttribPointer(A.aN,3,GL.FLOAT,false,0,0);
   GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER,geo.ib);
@@ -1103,7 +1159,7 @@ const MAX_DUSMAN=1;                          /* tek tek gelsinler: aynı anda te
 const TELEGRAF=1100;                         /* düşman mührünü bu kadar önce belli eder */
 const G={running:false,over:false,score:0,can:OY_CAN,flash:0,spawnT:1,t:0};
 const P={x:0,z:0,yaw:0,targetYaw:0,r:0.55};
-let camYaw=0,camX=0,camY=4.6,camZ=-8,camFx=0,camFy=0,camFz=1;
+let camYaw=0,camX=0,camY=3.6,camZ=-7.5,camFx=0,camFy=0,camFz=1;
 
 /* engeller: {minx,maxx,minz,maxz,h,geo,model,color} */
 const OBS=[],STAT=[];
@@ -1168,12 +1224,9 @@ const KAR=[];
                  color:TEMA.camGovde,emiss:0,kar:0.22});
       /* Dallar kar tutar ama kısmen: koni yüzeylerinin yalnız üste bakan
          kısmı beyazlıyor, alt yüzler koyu kalıyor → kademeler ayrışıyor. */
-      STAT.push({geo:GEO.cam,model:mModel(x,y,z,yat,g,h,g),
+      STAT.push({geo:GEO.cam[Math.floor(rnd()*GEO.cam.length)],
+                 model:mModel(x,y,z,yat,g,h,g),
                  color:rnd()<0.5?TEMA.camA:TEMA.camB,emiss:0,kar:0.50,parilti:TEMA.parilti*0.5});
-      /* tepede kar tutmuş küçük koni — karanlık siluete tek açık nokta */
-      if(rnd()<0.55)
-        STAT.push({geo:GEO.cone,model:mModel(x,y+h*0.75,z,yat,g*0.20,h*0.20,g*0.20),
-                   color:TEMA.camKar,emiss:0,kar:1,parilti:TEMA.parilti});
     }
   } }
 /* =============================================================
@@ -1508,16 +1561,48 @@ function updatePlayer(dt){
   if(LOCK)P.targetYaw=Math.atan2(LOCK.x-P.x,LOCK.z-P.z); /* oto-kilit: hep hedefe bak */
   P.yaw=angLerp(P.yaw,P.targetYaw,1-Math.pow(0.002,dt));
 }
+/* =============================================================
+   KAMERA — omuz üstü (over-the-shoulder)
+   Eskiden kamera tam arkadaydı ve karakter karenin ortasındaydı; referanstaki
+   çerçeveleme ise karakteri SOLA yaslayıp sağ tarafı açıyor, çünkü aksiyon
+   orada oluyor. Numara kamerayı kaydırmak değil, BAKIŞ NOKTASINI kaydırmak:
+   nişan noktası sağa gidince karakter solda kalıyor ve sağda daha çok dünya
+   görünüyor. Kamerayı kaydırsaydık karakter yine ortada kalırdı.
+
+   KAM_UZAK, karakterin dikeyde ~%20 kaplaması için çözüldü:
+     ekran oranı = boy / (2·d·tan(fov/2)),  boy≈1.85, fov=1.05
+     0.20 = 1.85 / (1.1548·d)  →  d ≈ 8.0  (kamera–karakter arası)
+     yatay = sqrt(8.0² − (KAM_YUK−0.9)²) ≈ 7.5
+   ============================================================= */
+/* KAM_BAK'ı yükseltmek kameranın eğimini azaltır (aşağı daha az bakar) ve
+   gökyüzünü kareye geri getirir; karakterin boyutunu ve yatay yerini
+   değiştirmez — o ikisi KAM_UZAK ve KAM_YAN'a bağlı. Ayarlamak isteyeceğin
+   üç sayı bunlar. */
+const KAM_UZAK=7.5, KAM_YUK=3.4, KAM_BAK=2.05;
+const KAM_YAN=2.35;   /* nişanın sağa kayması — karakteri sola yaslayan şey bu */
 function updateCamera(dt){
   const camTarget=LOCK?Math.atan2(LOCK.x-P.x,LOCK.z-P.z):P.yaw;
   camYaw=angLerp(camYaw,camTarget,1-Math.pow(0.03,dt));
-  const tx=P.x-Math.sin(camYaw)*6.6,tz=P.z-Math.cos(camYaw)*6.6;
+  const ileriX=Math.sin(camYaw), ileriZ=Math.cos(camYaw);
+  const tx=P.x-ileriX*KAM_UZAK, tz=P.z-ileriZ*KAM_UZAK;
   const k=1-Math.pow(0.001,dt);
-  camX+=(tx-camX)*k;camZ+=(tz-camZ)*k;camY+=(3.9-camY)*k;
-  /* bakış vektörü */
-  let fx=P.x-camX,fy=1.5-camY,fz=P.z-camZ;
+  camX+=(tx-camX)*k;camZ+=(tz-camZ)*k;camY+=(KAM_YUK-camY)*k;
+  kameraBak();
+}
+/* Bakış vektörü tek yerde: açılış ekranı updateCamera'yı çağırmıyor (oyun
+   başlamadan çalışmıyor), ayrı kurulunca menüdeki çerçeve oyundakiyle
+   uyuşmuyordu. */
+function kameraBak(){
+  const ileriX=Math.sin(camYaw), ileriZ=Math.cos(camYaw);
+  const sagX=-ileriZ, sagZ=ileriX;              /* ileri × dünya_yukarı */
+  const hedefX=P.x+sagX*KAM_YAN, hedefZ=P.z+sagZ*KAM_YAN;
+  let fx=hedefX-camX,fy=KAM_BAK-camY,fz=hedefZ-camZ;
   const fl=Math.hypot(fx,fy,fz)||1;camFx=fx/fl;camFy=fy/fl;camFz=fz/fl;
 }
+function kameraKur(){
+  camYaw=0;camX=P.x;camY=KAM_YUK;camZ=P.z-KAM_UZAK;kameraBak();
+}
+kameraKur();
 /* Oyuncunun element alışkanlığı — usta düşman buna göre karşılık seçer.
    Sadece son atışlar sayılır ki oyuncu tarz değiştirince düşman da uyum sağlasın. */
 const oySayac={};
@@ -1852,10 +1937,10 @@ function render(now){
   GL.uniform3f(U.uCam,camX,camY,camZ);
   GL.disable(GL.BLEND);GL.depthMask(true);
   /* kar zemini: arena içi düz, dışarısı tümsekli, 150 birime kadar uzanıyor */
-  draw(GEO.zemin,mModel(0,-0.02,0,0,1,1,1),TEMA.zemin,0,1,0,TEMA.parilti);
+  draw(GEO.zemin,mModel(0,-0.02,0,0,1,1,1),TEMA.zemin,0,1,0,TEMA.parilti,0.30);
   /* Kar gölge lekeleri artık DEKOR içinde (kaynatıldı).
      engeller + çevre + lekeler: kaynatılmış, renk başına tek çağrı */
-  for(const s of DEKOR) draw(s.geo,s.model,s.color,s.emiss,1,s.kar,s.parilti);
+  for(const s of DEKOR) draw(s.geo,s.model,s.color,s.emiss,1,s.kar,s.parilti,s.doku);
   /* karakterler */
   drawWizard(now,RDT);
   drawEnemies(now);
@@ -2002,7 +2087,7 @@ function endGame(){
 function resetGame(){
   G.score=0;scoreEl.textContent='0';G.can=OY_CAN;canCiz();
   enemies.length=0;shots.length=0;fx.length=0;
-  P.x=0;P.z=0;P.yaw=0;P.targetYaw=0;camYaw=0;camX=0;camY=4.6;camZ=-8;
+  P.x=0;P.z=0;P.yaw=0;P.targetYaw=0;kameraKur();
   cancelSpell();
   G.over=false;G.running=true;G.spawnT=2.2;G.flash=0;
 }
