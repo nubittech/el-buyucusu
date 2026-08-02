@@ -110,15 +110,16 @@ bağımsız ve çok güçlü bir ayraç, sınıflandırıcıda ağırlığı yü
 
 ### 3.3 Tanıma kuralları
 
-- **Zaman kilidi:** mudra ~150 ms sabit tutulmadan onaylanmaz. `v5.2`'de kalkan için
+- **Zaman kilidi:** mühür ~150 ms sabit tutulmadan onaylanmaz. `v5.2`'de kalkan için
   yazılan asimetrik sönümleme aynen kullanılır: tutarken tek kare kaybı mührü düşürmez.
 - **Ayırt edici sinyaller:** dört parmağın uzama oranı (hangi parmaklar açık) +
-  baş parmak ucunun dört parmak ucuna mesafesi (hangisine değiyor). `v5.2`'deki
-  `analyzeHand` metrikleri doğrudan yeniden kullanılabilir; Abhaya zaten kalibre edildi.
+  baş parmak–işaret ucu mesafesi (temas var mı) + baş parmak açıklığı (yana açık mı,
+  avuçta mı). `v5.2`'deki `analyzeHand` metrikleri doğrudan yeniden kullanılabilir;
+  açık avuç (Hava) zaten kalibre edilmiş durumda.
 - **Belirsizlik reddi:** en yakın iki prototip arasındaki fark belli bir eşiğin
   altındaysa **hiçbir mühür tetiklenmez**. Yanlış element atmaktansa hiç atmamak
   daha iyi — kalkandaki asıl sorun buydu.
-- **Geçiş karesi bağışıklığı:** bir mudradan diğerine geçerken aradaki şekiller
+- **Geçiş karesi bağışıklığı:** bir mühürden diğerine geçerken aradaki şekiller
   zaman kilidini dolduramadığı için tetiklenmez.
 
 ### 3.4 Savunma: karşı elementin mührü
@@ -263,7 +264,7 @@ ya da WebSocket röle (kurulumu kolay, sunucu gerekir).
 
 | Faz | İçerik | Çıktı |
 |---|---|---|
-| **1** | Mühür tanıma katmanı: 5 mudra + zaman kilidi + belirsizlik reddi | Sentetik iskelet testleri + ekranda canlı mühür test alanı |
+| **1** | Mühür tanıma katmanı: 5 mühür + zaman kilidi + belirsizlik reddi | Sentetik iskelet testleri + ekranda canlı mühür test alanı |
 | **2** | Element çekirdeği: mermi, güç, havada çarpışma, delme/nötrleme, siper | Tek düşmanla oynanabilir düello |
 | **3** | PvE: 1–3 düşman, davranış, can, ustalık ve ilerleme | Tam oynanabilir tek kişilik oyun |
 | **4** | PvP 1v1: taşıma katmanı + lockstep | İki kişilik düello |
