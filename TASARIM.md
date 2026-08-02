@@ -220,6 +220,108 @@ savunabilir — diğer dördüne karşı çaresiz kalır.
 Böylece tek elementli oyuncu hayatta kalabilir, ilerleme hâlâ anlamlıdır, ve
 "refleks arttıkça çoklu element" hedefi korunur.
 
+### 3.7 Beceri tablosu — ilk taslak
+
+**Tasarım ilkesi: ezber değil türetme.** İki mühürlük 25 kombinasyonu tek tek
+ezberletmek yerine, beceriler **döngüdeki ilişkiden** türetiliyor. Oyuncu tabloyu
+değil üç kuralı öğreniyor:
+
+> **Aynı element ×2** → güçlendirilmiş hâli
+> **Yendiğin elementi ekle** → beslenmiş: hızlı ve delici
+> **Seni yenen elementi ekle** → füzyon: hasar değil **kontrol**
+
+#### Kademe 1 — Temel saldırılar (1 mühür)
+
+Elementler burada birbirinden ayrışıyor; fark yalnızca avantaj döngüsünde değil.
+
+| Dizi | Beceri | Hız | Hasar | Delme | Not |
+|---|---|---|---|---|---|
+| 🔥 👉 | **Alev Oku** | orta | orta | orta | dengeli |
+| 🌪 👉 | **Rüzgar Bıçağı** | çok hızlı | düşük | düşük | taciz, kesme |
+| 💧 👉 | **Su Kırbacı** | orta | orta | düşük | hafif hedef takibi |
+| ⚡ 👉 | **Şimşek Ucu** | anlık | düşük | yüksek | kaçması çok zor |
+| 🪨 👉 | **Taş Mermisi** | yavaş | yüksek | çok yüksek | görülür ama durdurulamaz |
+
+#### Kademe 2A — Güçlendirilmiş (aynı element ×2)
+
+| Dizi | Beceri | Etki |
+|---|---|---|
+| 🔥🔥 👉 | **Ejder Nefesi** | geniş koni, kısa menzil, çok yüksek hasar |
+| 🌪🌪 👉 | **Kasırga** | iter — düşmanı siperin arkasından söker çıkarır |
+| 💧💧 👉 | **Sel Dalgası** | geniş cephe, isabet edeni yavaşlatır |
+| ⚡⚡ 👉 | **Gök Mızrağı** | anlık, en yüksek delme değeri |
+| 🪨🪨 👉 | **Taş Duvar** | *saldırı değil:* önüne geçici siper diker |
+
+**Taş Duvar** tasarımın çekirdeğine bağlanıyor: en garanti savunma siper ise, kendi
+siperini dikebilmek toprak ustasının imzası olur.
+
+#### Kademe 2B — Beslenmiş (yendiğin elementi ekle)
+
+İkinci element birinciyi besler. En hızlı yüklenen ve en delici kademe.
+
+| Dizi | Beceri | Etki |
+|---|---|---|
+| 🔥→🌪 👉 | **Alev Fırtınası** | hava ateşi körükler: hızlı + yüksek delme |
+| 🌪→⚡ 👉 | **Fırtına Sarmalı** | geniş, iter ve sersemletir |
+| ⚡→🪨 👉 | **Şarapnel Yıldırımı** | çarpınca parçalanır, çoklu isabet |
+| 🪨→💧 👉 | **Taş Seli** | yavaş ama neredeyse durdurulamaz |
+| 💧→🔥 👉 | **Kaynar Dalga** | isabet sonrası yanma hasarı bırakır |
+
+#### Kademe 2C — Füzyon (seni yenen elementi ekle)
+
+Zıt elementi katmak dengesiz bir karışım üretir: ham hasar yerine **kontrol**.
+
+| Dizi | Beceri | Etki |
+|---|---|---|
+| 🔥→💧 👉 | **Buhar Perdesi** | görüşü kapatır, düşmanın nişanını bozar |
+| 🌪→🔥 👉 | **Kor Girdabı** | alan hasarı, bölgeyi bir süre kapatır |
+| ⚡→🌪 👉 | **İyon Alanı** | yavaşlatır, düşmanın mühür süresini uzatır |
+| 🪨→⚡ 👉 | **Sarsıntı** | sersemletir ve **siperleri yıkar** |
+| 💧→🪨 👉 | **Bataklık** | zemini yavaşlatır, kaçışı keser |
+
+#### Kademe 3 — Zincirleme üstünlük (3 mühür)
+
+Döngüde **ardışık üç element** — yani her biri bir sonrakini yenen zincir. Beş zincir,
+beş nihai beceri. Kural yine türetilebilir: *"yendiğin elementi, sonra onun yendiğini."*
+
+| Dizi | Zincir | Beceri |
+|---|---|---|
+| 🔥🌪⚡ 👉 | Ateş > Hava > Yıldırım | **Yanan Gökyüzü** |
+| 🌪⚡🪨 👉 | Hava > Yıldırım > Toprak | **Fırtına Kıyameti** |
+| ⚡🪨💧 👉 | Yıldırım > Toprak > Su | **Yeraltı Sarsıntısı** |
+| 🪨💧🔥 👉 | Toprak > Su > Ateş | **Volkan** |
+| 💧🔥🌪 👉 | Su > Ateş > Hava | **Buhar Kasırgası** |
+
+Nihai beceriler çok yüksek güç ve delme taşır ama uzun yüklenir — dövüşün ortasında
+açıkta denenmez. **Siper arkasına geçip yüklemek** doğru kullanımdır; bu da siperi
+yalnızca savunma değil, saldırı hazırlığı aracı yapar.
+
+#### Yükleme süresi ve risk dengesi
+
+| Dizi uzunluğu | Yükleme | Risk |
+|---|---|---|
+| 1 mühür | ~0.35 sn | güvenli, dövüşün ortasında yapılabilir |
+| 2 mühür | ~0.70 sn | orta — açık alanda risklidir |
+| 3 mühür | ~1.20 sn | siper gerektirir |
+
+Düşman telegrafı ~1.1 sn olduğu için 3 mühürlük dizi açıkta neredeyse her zaman
+cezalandırılır. Tempo böylece kendini dengeliyor.
+
+#### Açılma sırası
+
+Beceri yalnızca dizideki **tüm elementlerde ustalık varsa** yüklenir. Bu, ilerlemeyi
+kendiliğinden kademelendiriyor:
+
+1. Tek element seçilir → Kademe 1 ve o elementin Kademe 2A becerisi açıktır
+2. İkinci element açılır → o ikilinin 2B / 2C becerileri gelir
+3. Üçüncü element açılır → ilgili Kademe 3 zinciri açılır
+
+#### Rezerve: nötr çiftler
+
+Döngüde birbirini yenmeyen 10 ikili (🔥+⚡, 🌪+💧 gibi) bu taslakta boş bırakıldı.
+İleride hareket, tuzak ve destek becerileri için ayrıldı — tablo ilk sürümde
+öğrenilebilir kalsın diye.
+
 ---
 
 ## 4. Saldırı, güç ve havada çarpışma
@@ -338,11 +440,17 @@ onayın alınmadan Faz 2'ye geçilmeyecek.
 
 Bunlar Faz 1'i bloke etmiyor, Faz 2'den önce karara bağlanmalı:
 
-1. **Şarj var mı?** Mühür tamamlanınca mermi hemen mi çıkar, yoksa basılı tutup
-   güçlendirilebilir mi?
-2. **Elementler birbirinden farklı davranıyor mu?** (Yıldırım hızlı ama zayıf,
-   Toprak yavaş ama güçlü gibi) — yoksa fark yalnızca döngüde mi?
-3. **Can değerleri:** kaç isabet öldürür? Doğru okumayla kaç saniyelik düello hedefleniyor?
-4. **Nişan:** oto-kilit mi kalsın, yoksa oyuncu hedefi kendi mi seçsin?
-5. **Ses:** her elementin ayırt edici sesi olacak mı? (Telegrafın duyulabilir olması
+1. **Can değerleri:** kaç isabet öldürür? Doğru okumayla kaç saniyelik düello hedefleniyor?
+2. **Nişan:** oto-kilit mi kalsın, yoksa oyuncu silah pozuyla hedefi kendi mi seçsin?
+3. **Ses:** her elementin ayırt edici sesi olacak mı? (Telegrafın duyulabilir olması
    refleks penceresini ciddi biçimde genişletir.)
+4. **Yüklü beceri taşınabilir mi?** Beceri yüklendikten sonra ateşlemeden dolaşılabilir
+   mi, yoksa belli bir süre sonra söner mi? Taşınabilirse siper arkasında yükleyip
+   çıkmak temel taktik olur — muhtemelen istenen bu, ama süresi belirlenmeli.
+
+**Kapanan konular** (3.7'deki beceri tablosuyla karara bağlandı):
+
+- ~~Şarj var mı?~~ → Şarj yerine **yükleme**: dizi kapanınca beceri yüklenir, süresi
+  dizi uzunluğuyla artar (0.35 / 0.70 / 1.20 sn). Ayrı bir basılı tutma mekaniği yok.
+- ~~Elementler farklı davranıyor mu?~~ → **Evet.** Yıldırım anlık ve delici ama zayıf,
+  Toprak yavaş ama durdurulamaz, Hava hızlı ve taciz edici, Su takipli, Ateş dengeli.
