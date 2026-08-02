@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mühür Tanıma — Faz 1</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{min-height:100vh;background:#0b0620;color:#efeaff;font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+ padding:14px;padding-bottom:40px;user-select:none;-webkit-user-select:none}
+h1{font-size:17px;font-weight:800;letter-spacing:.3px}
+h1 span{color:#8d81b8;font-weight:500;font-size:12px;margin-left:6px}
+.wrap{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.11);border-radius:16px;padding:14px}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row>.card{flex:1;min-width:260px}
+
+#now{display:flex;align-items:center;gap:16px}
+#nowIcon{font-size:52px;line-height:1;width:64px;text-align:center}
+#nowName{font-size:22px;font-weight:800}
+#nowSub{font-size:12px;color:#8d81b8;margin-top:2px}
+.bar{height:6px;background:rgba(255,255,255,.13);border-radius:99px;overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#37d6ff,#7db2ff);transition:width .08s linear}
+.bar.lock i{background:linear-gradient(90deg,#ffb347,#ff5e8a)}
+
+#seq{display:flex;gap:8px;align-items:center;min-height:52px;flex-wrap:wrap}
+.chip{font-size:28px;width:48px;height:48px;border-radius:12px;display:grid;place-items:center;
+ background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16)}
+.chip.gun{background:linear-gradient(180deg,#5b2ee0,#3b1a99);border-color:rgba(255,255,255,.3)}
+#seqEmpty{color:#6b6094;font-size:13px}
+
+#skill{font-size:19px;font-weight:800}
+#skillSub{font-size:12px;color:#8d81b8;margin-top:3px}
+#skill.ok{color:#8fe388}#skill.no{color:#ff7a7a}#skill.idle{color:#6b6094;font-weight:600;font-size:15px}
+
+canvas{background:#0a0622;border-radius:12px;border:1px solid rgba(255,255,255,.14);display:block;width:100%;max-width:260px;height:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+td{padding:3px 6px;border-bottom:1px solid rgba(255,255,255,.07)}
+td:first-child{color:#a99ed4}td:last-child{text-align:right}
+tr.win td{color:#8fe388;font-weight:700}
+
+button{background:linear-gradient(180deg,#5b2ee0,#3b1a99);color:#fff;border:1px solid rgba(255,255,255,.25);
+ border-radius:11px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer}
+button:active{transform:scale(.96)}
+button.ghost{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.16)}
+button:disabled{opacity:.4;cursor:default}
+.calRow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+.calRow .e{font-size:22px;width:30px;text-align:center}
+.calRow .n{flex:1;font-size:13px}
+.calRow .s{font-size:11px;color:#6b6094;min-width:60px;text-align:right}
+.calRow .s.done{color:#8fe388}
+.hint{font-size:12px;color:#8d81b8;line-height:1.6}
+kbd{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:5px;padding:1px 5px;font-size:11px}
+#err{color:#ff9e9e;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🥷 Mühür Tanıma <span id="ver">Faz 1 · motor bekleniyor…</span></h1>
+
+  <div class="card" id="now">
+    <div id="nowIcon">–</div>
+    <div style="flex:1">
+      <div id="nowName">Kamera bekleniyor</div>
+      <div id="nowSub">Başlamak için izin ver</div>
+      <div class="bar" id="lockBar"><i></i></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:12px;color:#a99ed4;margin-bottom:8px">DİZİ <span id="seqTimer" style="color:#6b6094"></span></div>
+    <div id="seq"><span id="seqEmpty">boş — bir element mührü yap</span></div>
+    <div style="margin-top:12px">
+      <div id="skill" class="idle">beceri yok</div>
+      <div id="skillSub"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card" style="flex:0 0 auto">
+      <div style="font-size:12px;color:#a99ed4;margin-bottom:8px">EL</div>
+      <canvas id="pip" width="260" height="330"></canvas>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;color:#a99ed4;margin-bottom:8px">MESAFELER <span style="color:#6b6094">(küçük = yakın)</span></div>
+      <table id="dbg"></table>
+      <div class="hint" style="margin-top:8px" id="rej"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:12px;color:#a99ed4">KALİBRASYON</div>
+      <button class="ghost" id="calReset">Varsayılana dön</button>
+    </div>
+    <div class="hint" style="margin-bottom:10px">
+      Gömülü prototipler sentetik iskeletten üretildi — senin elin farklı olabilir.
+      Pozu yap, <b>Kaydet</b>'e bas; kendi elin ölçü olur. Tarayıcıda saklanır.
+    </div>
+    <div id="calList"></div>
+  </div>
+
+  <div class="card hint">
+    <b>Nasıl çalışıyor:</b> mühür ~150 ms sabit tutulunca onaylanır ve diziye yazılır.
+    İki mühür arası 900 ms'yi geçerse dizi sıfırlanır. 👉 silah pozu diziyi kapatır,
+    beceri tablosunda aranır; eşleşme varsa yüklenir, yoksa ~0.4 sn ceza uygulanır.
+    En yakın iki poz birbirine çok yakınsa <b>hiçbir şey tetiklenmez</b>.
+    <div style="margin-top:8px"><kbd>D</kbd> hata ayıklama · <kbd>R</kbd> diziyi sıfırla</div>
+    <div id="err" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<video id="cam" playsinline muted autoplay style="position:fixed;width:2px;height:2px;opacity:0;pointer-events:none"></video>
+
+<script>
+'use strict';
+/* =============================================================
+   MÜHÜR TANIMA — Faz 1
+   Prototipler ve eşikler tools/ altındaki kalibrasyon düzeneğinden üretildi.
+   ============================================================= */
+
+/* --- pozlar: sıra ÖNEMLİ, özellik vektörüyle eşleşiyor --- */
+const POSES=[
+  {id:'fire', el:'🔥', ad:'Ateş',     jest:'baş parmak + işaret'},
+  {id:'air',  el:'🌪', ad:'Hava',     jest:'açık avuç'},
+  {id:'water',el:'💧', ad:'Su',       jest:'işaret + orta + yüzük'},
+  {id:'bolt', el:'⚡', ad:'Yıldırım', jest:'baş parmak + serçe'},
+  {id:'earth',el:'🪨', ad:'Toprak',   jest:'işaret + serçe'},
+  {id:'gun',  el:'👉', ad:'Silah',    jest:'işaret + orta, baş parmak dik'},
+];
+const BY={};for(const p of POSES)BY[p.id]=p;
+
+/* sentetik iskeletten üretilen prototip özellik vektörleri */
+const PROTO0={
+ fire:[1.0556,1.3382,1.3196,1.2601,0,0.7885,1.1016,1.3999,1.2276],
+ air:[1.3181,1.3382,1.3196,1.2601,1.1294,1.6009,1.9203,2.1374,1.7442],
+ water:[1.3181,1.3382,1.3196,0.7397,1.1498,1.2939,1.3512,0.7924,0.8737],
+ bolt:[0.6714,0.6456,0.6692,1.2601,0.8342,1.128,1.411,2.1374,1.7442],
+ earth:[1.3181,0.6456,0.6692,1.2601,1.1498,0.2489,0.5311,1.3819,0.8737],
+ gun:[1.3181,1.3382,0.6692,0.7397,0.89,1.3526,1.2866,1.5457,1.5922]};
+/* açıklık sinyali en güvenilir → ağırlıklı. 5. terim baş–işaret teması:
+   Ateş↔Hava tek zayıf çift olduğu için ağırlığı yüksek tutuldu. */
+const W=[1.6,1.6,1.6,1.6,1.5,1,1,1,1.3];
+const RED_MESAFE=1.25;   /* bundan uzaksa hiçbir poz kabul edilmez */
+const RED_ORAN=1.66;     /* ikinci en yakın / en yakın bu orandan küçükse belirsiz */
+const KILIT_MS=150;      /* zaman kilidi */
+const DIZI_MS=900;       /* mühürler arası zaman aşımı */
+const CEZA_MS=400;       /* eşleşmeyen dizi cezası */
+
+let PROTO=JSON.parse(JSON.stringify(PROTO0));
+try{const s=localStorage.getItem('muhurProto');if(s)Object.assign(PROTO,JSON.parse(s));}catch(e){}
+
+/* --- beceri tablosu: liste değil, döngüden türetiliyor --- */
+const YENER={fire:'air',air:'bolt',bolt:'earth',earth:'water',water:'fire'};
+const YENILIR={air:'fire',bolt:'air',earth:'bolt',water:'earth',fire:'water'};
+const TEMEL={fire:'Alev Oku',air:'Rüzgar Bıçağı',water:'Su Kırbacı',bolt:'Şimşek Ucu',earth:'Taş Mermisi'};
+const GUCLU={fire:'Ejder Nefesi',air:'Kasırga',water:'Sel Dalgası',bolt:'Gök Mızrağı',earth:'Taş Duvar'};
+const BESLI={fire:'Alev Fırtınası',air:'Fırtına Sarmalı',bolt:'Şarapnel Yıldırımı',earth:'Taş Seli',water:'Kaynar Dalga'};
+const FUZYON={fire:'Buhar Perdesi',air:'Kor Girdabı',bolt:'İyon Alanı',earth:'Sarsıntı',water:'Bataklık'};
+const ZINCIR={fire:'Yanan Gökyüzü',air:'Fırtına Kıyameti',bolt:'Yeraltı Sarsıntısı',earth:'Volkan',water:'Buhar Kasırgası'};
+const YUKLEME=[0,350,700,1200];
+
+function beceriBul(dz){
+  const n=dz.length;
+  if(n===1) return {ad:TEMEL[dz[0]],tur:'Temel',ms:YUKLEME[1]};
+  if(n===2){
+    const [a,b]=dz;
+    if(a===b)          return {ad:GUCLU[a], tur:'Güçlendirilmiş',ms:YUKLEME[2]};
+    if(YENER[a]===b)   return {ad:BESLI[a], tur:'Beslenmiş',     ms:YUKLEME[2]};
+    if(YENILIR[a]===b) return {ad:FUZYON[a],tur:'Füzyon',        ms:YUKLEME[2]};
+    return null;                                  /* nötr çiftler rezerve */
+  }
+  if(n===3){
+    const [a,b,c]=dz;
+    if(YENER[a]===b&&YENER[b]===c) return {ad:ZINCIR[a],tur:'Zincirleme üstünlük',ms:YUKLEME[3]};
+    return null;
+  }
+  return null;
+}
+
+/* --- özellik vektörü --- */
+const d2v=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function feat(lm){
+  const pw=d2v(lm[5],lm[17])||1e-6;
+  const ext=(t,p)=>d2v(lm[t],lm[0])/(d2v(lm[p],lm[0])||1e-6);
+  return [ext(8,6),ext(12,10),ext(16,14),ext(20,18),
+    d2v(lm[4],lm[8])/pw,d2v(lm[4],lm[12])/pw,d2v(lm[4],lm[16])/pw,d2v(lm[4],lm[20])/pw,
+    d2v(lm[4],lm[17])/pw];
+}
+const uzaklik=(a,b)=>{let s=0;for(let k=0;k<9;k++){const d=(a[k]-b[k])*W[k];s+=d*d;}return Math.sqrt(s);};
+
+/* en yakın prototip + belirsizlik reddi */
+function siniflandir(f){
+  const ds=POSES.map(p=>({id:p.id,d:uzaklik(f,PROTO[p.id])})).sort((a,b)=>a.d-b.d);
+  const red = ds[0].d>RED_MESAFE ? 'uzak'
+            : (ds[1].d/(ds[0].d||1e-6))<RED_ORAN ? 'belirsiz' : null;
+  return {ds,id:red?null:ds[0].id,red};
+}
+
+/* =============================================================
+   DURUM MAKİNESİ
+   ============================================================= */
+const S={aday:null,kilitMs:0,onayli:null,dizi:[],sonMuhur:0,
+  beceri:null,yukMs:0,yukTotal:0,cezaUntil:0,son:null};
+
+function muhurEkle(id){
+  if(id==='gun'){ diziKapat(); return; }
+  if(S.dizi.length>=3){ diziBasarisiz('dizi en fazla 3 mühür'); return; }
+  S.dizi.push(id); S.sonMuhur=performance.now();
+  S.beceri=null;S.yukMs=0;
+  ciz();
+}
+function diziKapat(){
+  if(!S.dizi.length) return;
+  const b=beceriBul(S.dizi);
+  if(!b){ diziBasarisiz('bu dizi bir beceriye karşılık gelmiyor'); return; }
+  S.beceri=b;S.yukTotal=b.ms;S.yukMs=0;
+  S.dizi=[];S.sonMuhur=0;
+  ciz();
+}
+function diziBasarisiz(sebep){
+  S.dizi=[];S.sonMuhur=0;S.beceri=null;S.yukMs=0;
+  S.cezaUntil=performance.now()+CEZA_MS;S.son=sebep;
+  ciz();
+}
+
+function guncelle(id,dt,now){
+  /* ceza süresi: hiçbir mühür işlenmez */
+  if(now<S.cezaUntil){ S.aday=null;S.kilitMs=0; return; }
+
+  /* zaman kilidi — asimetrik: tutarken tek kare kaybı düşürmez */
+  if(id&&id===S.aday) S.kilitMs=Math.min(KILIT_MS+120,S.kilitMs+dt);
+  else if(id){ S.aday=id;S.kilitMs=dt; }
+  else S.kilitMs=Math.max(0,S.kilitMs-dt*1.6);
+  if(!S.kilitMs) S.aday=null;
+
+  const onayli=(S.aday&&S.kilitMs>=KILIT_MS)?S.aday:null;
+  if(onayli&&onayli!==S.onayli) muhurEkle(onayli);   /* yalnız yeni onayda tetikle */
+  S.onayli=onayli;
+
+  /* dizi zaman aşımı */
+  if(S.dizi.length&&now-S.sonMuhur>DIZI_MS){ S.dizi=[];S.sonMuhur=0;S.son='dizi zaman aşımına uğradı';ciz(); }
+
+  /* yükleme */
+  if(S.beceri&&S.yukMs<S.yukTotal){ S.yukMs=Math.min(S.yukTotal,S.yukMs+dt); }
+}
+
+/* =============================================================
+   ÇİZİM
+   ============================================================= */
+const $=id=>document.getElementById(id);
+const nowIcon=$('nowIcon'),nowName=$('nowName'),nowSub=$('nowSub'),lockBar=$('lockBar'),
+      seqEl=$('seq'),seqEmpty=$('seqEmpty'),seqTimer=$('seqTimer'),
+      skillEl=$('skill'),skillSub=$('skillSub'),dbgEl=$('dbg'),rejEl=$('rej'),errEl=$('err');
+let sonDbg=null,dbgAcik=true;
+
+function ciz(){
+  /* şu anki poz */
+  const a=S.aday?BY[S.aday]:null;
+  nowIcon.textContent=a?a.el:'–';
+  nowName.textContent=a?a.ad:(S.son?'—':'mühür yok');
+  nowSub.textContent=a?a.jest:(S.son||'elini kameraya göster');
+  const pr=Math.min(1,S.kilitMs/KILIT_MS);
+  lockBar.firstElementChild.style.width=(pr*100)+'%';
+  lockBar.classList.toggle('lock',pr>=1);
+
+  /* dizi */
+  seqEl.innerHTML='';
+  if(!S.dizi.length){ seqEl.appendChild(seqEmpty); seqEmpty.style.display=''; }
+  else for(const id of S.dizi){
+    const d=document.createElement('div');d.className='chip';d.textContent=BY[id].el;seqEl.appendChild(d);
+  }
+  if(S.dizi.length){
+    const g=document.createElement('div');g.className='chip';g.style.opacity='.35';g.textContent='👉';
+    g.title='kapatmak için silah pozu';seqEl.appendChild(g);
+  }
+
+  /* beceri */
+  if(S.beceri){
+    const yuklendi=S.yukMs>=S.yukTotal;
+    skillEl.className='ok';
+    skillEl.textContent=(yuklendi?'✓ ':'⏳ ')+S.beceri.ad;
+    skillSub.textContent=S.beceri.tur+' · yükleme '+S.beceri.ms+' ms'+
+      (yuklendi?' · ATEŞE HAZIR':' · %'+Math.round(S.yukMs/S.yukTotal*100));
+  } else if(performance.now()<S.cezaUntil){
+    skillEl.className='no';skillEl.textContent='✗ eşleşme yok';skillSub.textContent=S.son||'';
+  } else {
+    skillEl.className='idle';skillEl.textContent='beceri yok';skillSub.textContent=S.son||'';
+  }
+}
+
+function cizDbg(r){
+  if(!dbgAcik||!r){dbgEl.innerHTML='';rejEl.textContent='';return;}
+  dbgEl.innerHTML=r.ds.map((x,i)=>
+    `<tr class="${i===0&&!r.red?'win':''}"><td>${BY[x.id].el} ${BY[x.id].ad}</td><td>${x.d.toFixed(3)}</td></tr>`).join('');
+  const oran=r.ds[1].d/(r.ds[0].d||1e-6);
+  rejEl.innerHTML=r.red==='uzak'
+      ? `<b style="color:#ff9e9e">REDDEDİLDİ</b> — en yakın ${r.ds[0].d.toFixed(2)} > ${RED_MESAFE}`
+    : r.red==='belirsiz'
+      ? `<b style="color:#ffcf7a">BELİRSİZ</b> — oran ${oran.toFixed(2)} < ${RED_ORAN}`
+      : `ayrım oranı ${oran.toFixed(2)} (eşik ${RED_ORAN})`;
+}
+
+/* el iskeleti önizleme */
+const KEMIK=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[0,9],[9,10],[10,11],[11,12],
+  [0,13],[13,14],[14,15],[15,16],[0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17]];
+const pip=$('pip'),pctx=pip.getContext('2d');
+function cizEl(lm,renk){
+  pctx.clearRect(0,0,pip.width,pip.height);
+  pctx.fillStyle='#0a0622';pctx.fillRect(0,0,pip.width,pip.height);
+  if(!lm){pctx.fillStyle='#4b4270';pctx.font='13px sans-serif';pctx.textAlign='center';
+    pctx.fillText('el görünmüyor',pip.width/2,pip.height/2);return;}
+  const X=p=>(1-p.x)*pip.width, Y=p=>p.y*pip.height;
+  pctx.strokeStyle=renk;pctx.lineWidth=2.5;pctx.lineCap='round';
+  for(const b of KEMIK){pctx.beginPath();pctx.moveTo(X(lm[b[0]]),Y(lm[b[0]]));pctx.lineTo(X(lm[b[1]]),Y(lm[b[1]]));pctx.stroke();}
+  pctx.fillStyle=renk;
+  for(let i=0;i<lm.length;i++){pctx.beginPath();pctx.arc(X(lm[i]),Y(lm[i]),i===4?4.5:3,0,6.3);pctx.fill();}
+  pctx.fillStyle='#fff';pctx.beginPath();pctx.arc(X(lm[4]),Y(lm[4]),2,0,6.3);pctx.fill();
+}
+
+/* =============================================================
+   KALİBRASYON
+   ============================================================= */
+let sonLm=null;
+const calList=$('calList');
+function calCiz(){
+  calList.innerHTML='';
+  for(const p of POSES){
+    const ozel=JSON.stringify(PROTO[p.id])!==JSON.stringify(PROTO0[p.id]);
+    const row=document.createElement('div');row.className='calRow';
+    row.innerHTML=`<div class="e">${p.el}</div><div class="n"><b>${p.ad}</b> <span style="color:#6b6094">${p.jest}</span></div>
+      <div class="s ${ozel?'done':''}">${ozel?'kendi elin':'varsayılan'}</div>`;
+    const b=document.createElement('button');b.textContent='Kaydet';
+    b.onclick=()=>{
+      if(!sonLm){errEl.textContent='El görünmüyor — kaydedilemedi.';return;}
+      PROTO[p.id]=feat(sonLm);
+      try{localStorage.setItem('muhurProto',JSON.stringify(PROTO));}catch(e){}
+      errEl.textContent='';calCiz();
+    };
+    row.appendChild(b);calList.appendChild(row);
+  }
+}
+$('calReset').onclick=()=>{
+  PROTO=JSON.parse(JSON.stringify(PROTO0));
+  try{localStorage.removeItem('muhurProto');}catch(e){}
+  calCiz();
+};
+calCiz();ciz();
+
+/* =============================================================
+   KAMERA + DÖNGÜ
+   ============================================================= */
+const video=$('cam');
+let landmarker=null,sonVideoTs=-1,sonT=performance.now();
+
+async function init(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+    video.srcObject=stream;await video.play();
+  }catch(e){ errEl.textContent='Kamera açılamadı: '+e.message; $('ver').textContent='Faz 1 · kamera yok';
+    nowName.textContent='Kamera yok';nowSub.textContent='izin verilmedi'; return; }
+  try{
+    const {FilesetResolver,HandLandmarker}=
+      await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm');
+    const vision=await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+    const opts=d=>({baseOptions:{modelAssetPath:
+      'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+      delegate:d},runningMode:'VIDEO',numHands:1});
+    try{ landmarker=await HandLandmarker.createFromOptions(vision,opts('GPU')); }
+    catch(e){ landmarker=await HandLandmarker.createFromOptions(vision,opts('CPU')); }
+    $('ver').textContent='Faz 1 · motor hazır ✓';
+    nowName.textContent='mühür yok';nowSub.textContent='elini kameraya göster';
+  }catch(e){ errEl.textContent='Motor yüklenemedi: '+e.message; }
+}
+
+function tick(){
+  requestAnimationFrame(tick);
+  const now=performance.now();
+  const dt=Math.min(60,now-sonT);sonT=now;
+
+  let lm=null;
+  if(landmarker&&video.readyState>=2&&video.currentTime!==sonVideoTs){
+    sonVideoTs=video.currentTime;
+    try{ const res=landmarker.detectForVideo(video,now); lm=(res.landmarks&&res.landmarks[0])||null; }catch(e){}
+    sonLm=lm;
+  } else lm=sonLm;
+
+  let r=null,id=null;
+  if(lm){ r=siniflandir(feat(lm)); id=r.id; }
+  guncelle(id,dt,now);
+
+  const renk=S.aday?(S.kilitMs>=KILIT_MS?'#8fe388':'#37d6ff'):'#6ee7a0';
+  cizEl(lm,lm?renk:null);
+  cizDbg(r);
+  ciz();
+
+  seqTimer.textContent=S.dizi.length&&S.sonMuhur
+    ? `· sıfırlanmaya ${Math.max(0,DIZI_MS-(now-S.sonMuhur))|0} ms` : '';
+}
+
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='d'){dbgAcik=!dbgAcik;}
+  if(k==='r'){S.dizi=[];S.beceri=null;S.yukMs=0;S.son=null;ciz();}
+});
+
+init();tick();
+</script>
+</body>
+</html>
