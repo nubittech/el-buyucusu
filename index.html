@@ -57,7 +57,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">Prototip v5.1 · motor bekleniyor…</div>
+  <div class="sub" id="subLine">Prototip v5.2 · motor bekleniyor…</div>
   <div class="rules">
     🎯 <b>Oto-kilit:</b> kamera hep en yakın düşmana kilitli — nişan yok<br>
     🕹️ <b>Sağ başparmak:</b> sağ yarıda sürükle → manevra/strafe<br>
@@ -89,7 +89,7 @@ const pip=document.getElementById('pip'), pctx=pip.getContext('2d');
 const video=document.getElementById('cam');
 const statusEl=document.getElementById('status'), scoreEl=document.getElementById('score');
 const heartsEl=document.getElementById('hearts'), ammoEl=document.getElementById('ammo');
-document.getElementById('subLine').textContent='Prototip v5.1 · motor hazır ✓';
+document.getElementById('subLine').textContent='Prototip v5.2 · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -328,7 +328,13 @@ function spawnEnemy(){
   const side=Math.floor(Math.random()*4),t=(Math.random()*2-1)*(AR-4);
   const x=side===0?-AR+3:side===1?AR-3:t;
   const z=side===2?-AR+3:side===3?AR-3:(side<2?t:AR-3);
-  const e={x,z,sp:2.2+Math.random()*1.4,cd:2.4+Math.random()*1.6,ss:Math.random()<0.5?-1:1,bob:Math.random()*6,pi:Math.floor(Math.random()*3)};
+  /* iki tip: süzülen hayalet · yerde koşan ninja (oyuncuyla aynı iskelet, düşman paleti).
+     Ninja daha çevik ve daha yakından taciz eder; hayalet yavaş ve uzaktan atar. */
+  const ninja=Math.random()<0.45;
+  const e={x,z,kind:ninja?'ninja':'ghost',arm:0,
+    sp:(2.2+Math.random()*1.4)*(ninja?1.35:1),
+    cd:(2.4+Math.random()*1.6)*(ninja?0.8:1),
+    ss:Math.random()<0.5?-1:1,bob:Math.random()*6,pi:Math.floor(Math.random()*3)};
   pushOut(e,0.6);enemies.push(e);
 }
 function fire(x,y,z,dx,dy,dz,speed,friendly,tgt){
@@ -613,10 +619,12 @@ function updateEnemies(dt,now){
     const dx=P.x-e.x,dz=P.z-e.z,d=Math.hypot(dx,dz)||1e-4;
     const ux=dx/d,uz=dz/d;
     const los=hasLOS(e.x,e.z,P.x,P.z,1.15);
+    /* ninja daha yakın bir kuşakta dolanır: baskı kurar, hayalet mesafeyi korur */
+    const far=e.kind==='ninja'?9.5:13, near=e.kind==='ninja'?4.2:6.5;
     let mx=0,mz=0;
     if(!los){mx=ux;mz=uz;}
-    else if(d>13){mx=ux;mz=uz;}
-    else if(d<6.5){mx=-ux;mz=-uz;}
+    else if(d>far){mx=ux;mz=uz;}
+    else if(d<near){mx=-ux;mz=-uz;}
     else {mx=-uz*e.ss;mz=ux*e.ss;if(Math.random()<0.004)e.ss*=-1;}
     e.x+=mx*e.sp*dt;e.z+=mz*e.sp*dt;
     pushOut(e,0.6);
@@ -626,11 +634,17 @@ function updateEnemies(dt,now){
       else {boom(e.x,1.1,e.z,1.5,0xff4466);damage();}
       enemies.splice(i,1);continue;}
     e.cd-=dt;
+    /* ninja kolunu atıştan hemen önce kaldırır → oyuncuya okunabilir bir işaret */
+    if(e.kind==='ninja'){
+      const want=(los&&d<20&&e.cd<0.5)?1:0;
+      e.arm+=(want-e.arm)*Math.min(1,dt*8);
+    }
     if(e.cd<=0&&los&&d<20){
-      let sx=P.x-e.x,sy=1.05-1.2,sz2=P.z-e.z;
+      const my=muzzleY(e);
+      let sx=P.x-e.x,sy=1.05-my,sz2=P.z-e.z;
       const sl=Math.hypot(sx,sy,sz2)||1;
-      fire(e.x,1.2,e.z,sx/sl,sy/sl,sz2/sl,8.5,false);
-      e.cd=2+Math.random()*1.8;
+      fire(e.x,my,e.z,sx/sl,sy/sl,sz2/sl,e.kind==='ninja'?10:8.5,false);
+      e.cd=(2+Math.random()*1.8)*(e.kind==='ninja'?0.8:1);
     }
   }
 }
@@ -638,7 +652,7 @@ function updateShots(dt){
   for(let i=shots.length-1;i>=0;i--){const s=shots[i];
     /* dost mermiler kilitli hedefe hafif güdümlü */
     if(s.friendly&&s.tgt&&enemies.indexOf(s.tgt)>=0){
-      const ty=1.2+Math.sin(s.tgt.bob)*0.15;
+      const ty=eyOf(s.tgt);
       let hx=s.tgt.x-s.x,hy=ty-s.y,hz=s.tgt.z-s.z;
       const hl=Math.hypot(hx,hy,hz)||1;
       const sp=Math.hypot(s.vx,s.vy,s.vz);
@@ -651,7 +665,7 @@ function updateShots(dt){
       boom(s.x,Math.max(0.2,s.y),s.z,s.friendly?1.1:0.9,s.friendly?0xffa040:0xbb55ff);dead=true;
     } else if(s.friendly){
       for(let k=enemies.length-1;k>=0;k--){const e=enemies[k];
-        const ey=1.2+Math.sin(e.bob)*0.15;
+        const ey=eyOf(e);
         if(Math.hypot(e.x-s.x,ey-s.y,e.z-s.z)<0.95){
           boom(e.x,ey,e.z,1.7,0xffa040);enemies.splice(k,1);
           G.score+=10;scoreEl.textContent=G.score;dead=true;vibrate(20);break;}}
@@ -680,6 +694,50 @@ function damage(){
    KARAKTER MODELLERİ
    ============================================================= */
 let armRaise=0;
+/* --- paylaşılan ninja modeli: hem oyuncu hem de ninja düşmanlar bunu çizer ---
+   C  : renk paleti {SUIT,DARK,ACC,SKIN,GOLD,EYE,eyeGlow,horns}
+   run: koşu fazı (-1..1) · ar: sol kolun kalkma oranı (0..1) · tp: kuyruk salınım fazı
+   Sol elin yerel konumunu döndürür — şarj topu / şuriken oraya takılır. */
+function drawNinja(pm,C,run,ar,tp){
+  const SUIT=C.SUIT,DARK=C.DARK,ACC=C.ACC,SKIN=C.SKIN;
+  /* bacaklar: kalçadan aşağı, koşarken makaslar */
+  draw(GEO.cyl,M(pm,mT(0.16,0.66,0),mRx(Math.PI+run*0.7),mS(0.24,0.64,0.24)),DARK,0);
+  draw(GEO.cyl,M(pm,mT(-0.16,0.66,0),mRx(Math.PI-run*0.7),mS(0.24,0.64,0.24)),DARK,0);
+  /* gövde + omuz + kuşak */
+  draw(GEO.cyl,M(pm,mT(0,0.6,0),mS(0.62,0.58,0.5)),SUIT,0);
+  draw(GEO.sph,M(pm,mT(0,1.18,0),mS(0.6,0.38,0.5)),SUIT,0);
+  draw(GEO.cyl,M(pm,mT(0,0.94,0),mS(0.64,0.13,0.52)),ACC,0.15);
+  draw(GEO.box,M(pm,mT(0.1,0.6,-0.29),mRx(0.12+run*0.2),mS(0.13,0.5,0.03)),ACC,0.1);
+  /* baş: kukuleta + yüz bandı + gözler */
+  draw(GEO.sph,M(pm,mT(0,1.52,0),mS(0.52,0.54,0.52)),DARK,0);
+  draw(GEO.sph,M(pm,mT(0,1.54,0.17),mS(0.36,0.15,0.18)),SKIN,0.05);
+  draw(GEO.sph,M(pm,mT(0.09,1.55,0.25),mS(0.07,0.05,0.03)),C.EYE,C.eyeGlow);
+  draw(GEO.sph,M(pm,mT(-0.09,1.55,0.25),mS(0.07,0.05,0.03)),C.EYE,C.eyeGlow);
+  /* alın bandı + plaka ya da oni boynuzları + arkada sallanan kuyruklar */
+  draw(GEO.cyl,M(pm,mT(0,1.66,0),mS(0.55,0.1,0.55)),ACC,0.2);
+  if(C.horns){
+    draw(GEO.cone,M(pm,mT(0.21,1.68,0.04),mRz(-0.4),mS(0.13,0.32,0.13)),C.EYE,0.35);
+    draw(GEO.cone,M(pm,mT(-0.21,1.68,0.04),mRz(0.4),mS(0.13,0.32,0.13)),C.EYE,0.35);
+  } else {
+    draw(GEO.box,M(pm,mT(0,1.67,0.26),mS(0.18,0.09,0.03)),0xb9c2d8,0.25);
+  }
+  draw(GEO.box,M(pm,mT(0.07,1.44,-0.32),mRx(0.5+Math.sin(tp)*0.25),mS(0.07,0.42,0.02)),ACC,0.1);
+  draw(GEO.box,M(pm,mT(-0.05,1.42,-0.33),mRx(0.65+Math.sin(tp+1.3)*0.25),mS(0.07,0.36,0.02)),ACC,0.1);
+  /* sırtta katana: kın + balçak + sarılı kabza */
+  draw(GEO.cyl,M(pm,mT(-0.34,0.72,-0.27),mRz(-0.75),mS(0.1,1.2,0.1)),0x10142c,0.05);
+  draw(GEO.torus,M(pm,mT(0.47,1.58,-0.27),mRz(-0.75),mRx(1.5708),mS(0.2,0.2,0.2)),C.GOLD,0.2);
+  draw(GEO.cyl,M(pm,mT(0.47,1.58,-0.27),mRz(-0.75),mS(0.08,0.34,0.08)),ACC,0.1);
+  /* sağ kol: koşarken salınır */
+  draw(GEO.cyl,M(pm,mT(0.42,1.32,0),mRz(-2.65),mRx(run*0.5),mS(0.13,0.5,0.13)),SUIT,0);
+  draw(GEO.sph,M(pm,mT(0.62,0.92,run*0.22),mS(0.16,0.16,0.16)),DARK,0);
+  /* sol kol: şarjda / atış hazırlığında öne kalkar */
+  draw(GEO.cyl,M(pm,mT(-0.42,1.32,0),mRz(2.65-2.3*ar),mRx(-1.35*ar-run*0.5*(1-ar)),mS(0.13,0.52,0.13)),SUIT,0);
+  const hx=-0.6+0.22*ar, hy=0.92+0.52*ar, hz=(1-ar)*(-run*0.22)+0.55*ar;
+  draw(GEO.sph,M(pm,mT(hx,hy,hz),mS(0.16,0.16,0.16)),DARK,0);
+  return {hx,hy,hz};
+}
+/* oyuncu paleti: lacivert giysi, kırmızı bant, mat gözler */
+const PPAL={SUIT:0x2a3160,DARK:0x1c2246,ACC:0xe03a4e,SKIN:0xf2d5b1,GOLD:0xffd166,EYE:0x14122e,eyeGlow:0,horns:false};
 function drawWizard(now,dt){ /* NINJA */
   const moving=J.active&&Math.hypot(J.dx,J.dy)>5;
   armRaise+=(((S.mode==='charged'||S.chargeMs>60)?1:0)-armRaise)*Math.min(1,dt*8);
@@ -688,49 +746,43 @@ function drawWizard(now,dt){ /* NINJA */
   const lean=moving?0.14:0.03;
   const sway=(moving?Math.sin(now*0.014)*0.04:Math.sin(now*0.002)*0.015);
   const pm=M(mT(P.x,bob,P.z),mRy(P.yaw),mRx(lean),mRz(sway));
-  const SUIT=0x2a3160,DARK=0x1c2246,RED=0xe03a4e,SKIN=0xf2d5b1,GOLD=0xffd166;
-  /* bacaklar: kalçadan aşağı, koşarken makaslar */
-  draw(GEO.cyl,M(pm,mT(0.16,0.66,0),mRx(Math.PI+run*0.7),mS(0.24,0.64,0.24)),DARK,0);
-  draw(GEO.cyl,M(pm,mT(-0.16,0.66,0),mRx(Math.PI-run*0.7),mS(0.24,0.64,0.24)),DARK,0);
-  /* gövde + omuz + kuşak */
-  draw(GEO.cyl,M(pm,mT(0,0.6,0),mS(0.62,0.58,0.5)),SUIT,0);
-  draw(GEO.sph,M(pm,mT(0,1.18,0),mS(0.6,0.38,0.5)),SUIT,0);
-  draw(GEO.cyl,M(pm,mT(0,0.94,0),mS(0.64,0.13,0.52)),RED,0.15);
-  draw(GEO.box,M(pm,mT(0.1,0.6,-0.29),mRx(0.12+run*0.2),mS(0.13,0.5,0.03)),RED,0.1);
-  /* baş: kukuleta + yüz bandı + gözler */
-  draw(GEO.sph,M(pm,mT(0,1.52,0),mS(0.52,0.54,0.52)),DARK,0);
-  draw(GEO.sph,M(pm,mT(0,1.54,0.17),mS(0.36,0.15,0.18)),SKIN,0.05);
-  draw(GEO.sph,M(pm,mT(0.09,1.55,0.25),mS(0.07,0.05,0.03)),0x14122e,0);
-  draw(GEO.sph,M(pm,mT(-0.09,1.55,0.25),mS(0.07,0.05,0.03)),0x14122e,0);
-  /* alın bandı + metal plaka + arkada sallanan kuyruklar */
-  draw(GEO.cyl,M(pm,mT(0,1.66,0),mS(0.55,0.1,0.55)),RED,0.2);
-  draw(GEO.box,M(pm,mT(0,1.67,0.26),mS(0.18,0.09,0.03)),0xb9c2d8,0.25);
-  draw(GEO.box,M(pm,mT(0.07,1.44,-0.32),mRx(0.5+Math.sin(now*0.007)*0.25),mS(0.07,0.42,0.02)),RED,0.1);
-  draw(GEO.box,M(pm,mT(-0.05,1.42,-0.33),mRx(0.65+Math.sin(now*0.007+1.3)*0.25),mS(0.07,0.36,0.02)),RED,0.1);
-  /* sırtta katana: kın + balçak + sarılı kabza */
-  draw(GEO.cyl,M(pm,mT(-0.34,0.72,-0.27),mRz(-0.75),mS(0.1,1.2,0.1)),0x10142c,0.05);
-  draw(GEO.torus,M(pm,mT(0.47,1.58,-0.27),mRz(-0.75),mRx(1.5708),mS(0.2,0.2,0.2)),GOLD,0.2);
-  draw(GEO.cyl,M(pm,mT(0.47,1.58,-0.27),mRz(-0.75),mS(0.08,0.34,0.08)),RED,0.1);
-  /* sağ kol: koşarken salınır */
-  draw(GEO.cyl,M(pm,mT(0.42,1.32,0),mRz(-2.65),mRx(run*0.5),mS(0.13,0.5,0.13)),SUIT,0);
-  draw(GEO.sph,M(pm,mT(0.62,0.92,run*0.22),mS(0.16,0.16,0.16)),DARK,0);
-  /* sol kol: şarjda öne kalkar, elde ateş */
-  const ar=armRaise;
-  draw(GEO.cyl,M(pm,mT(-0.42,1.32,0),mRz(2.65-2.3*ar),mRx(-1.35*ar-run*0.5*(1-ar)),mS(0.13,0.52,0.13)),SUIT,0);
-  const hx=-0.6+0.22*ar, hy=0.92+0.52*ar, hz=(1-ar)*(-run*0.22)+0.55*ar;
-  draw(GEO.sph,M(pm,mT(hx,hy,hz),mS(0.16,0.16,0.16)),DARK,0);
+  const h=drawNinja(pm,PPAL,run,armRaise,now*0.007);
   /* şarj topu: sol elde 3D olarak da parlar */
   if(S.chargeMs>30||S.mode==='charged'){
     const prog=S.chargeMs/S.CHARGE_NEED;
     const sc=0.14+prog*0.24+(S.mode==='charged'?Math.sin(now*0.02)*0.04:0);
-    draw(GEO.sph,M(pm,mT(hx,hy+0.14,hz+0.1),mS(sc,sc,sc)),0xffb347,1);
+    draw(GEO.sph,M(pm,mT(h.hx,h.hy+0.14,h.hz+0.1),mS(sc,sc,sc)),0xffb347,1);
   }
 }
 const EPAL=[[0x2fd8ff,0xeaffff],[0x9dff6a,0xf4ffe6],[0xff7de8,0xfff0fb]];
+/* düşman ninja paletleri: kızıl oni / zehir / boşluk — oyuncunun lacivertinden
+   net ayrışsın diye sıcak-doygun renkler + parlayan gözler ve oni boynuzları */
+const NPAL=[
+  {SUIT:0x5e1626,DARK:0x350d18,ACC:0xff5a3c,SKIN:0xc9a888,GOLD:0xd8a23c,EYE:0xffb64a,eyeGlow:1,horns:true},
+  {SUIT:0x14402f,DARK:0x0a2418,ACC:0x7cff5a,SKIN:0xbfae90,GOLD:0xc9d84a,EYE:0xaaff66,eyeGlow:1,horns:true},
+  {SUIT:0x3b1a5e,DARK:0x220e38,ACC:0xff7de8,SKIN:0xc7b0c9,GOLD:0xd8a2e0,EYE:0xff8ae6,eyeGlow:1,horns:true}];
+/* düşman merkez yüksekliği — güdüm, isabet testi ve çizim AYNI değeri okumalı.
+   Hayalet süzülür (yüksek, yavaş salınır), ninja yerde koşar (alçak, hızlı seker). */
+function ninjaStride(e){ return e.bob*2.4; }                        /* koşu fazı */
+function ninjaBobY(e){ return Math.abs(Math.sin(ninjaStride(e)))*0.07; } /* her adımda seker */
+function eyOf(e){ return e.kind==='ninja' ? 1.02+ninjaBobY(e) : 1.2+Math.sin(e.bob)*0.15; }
+/* ninja atışını elinden çıkarır, hayalet gövdesinden */
+function muzzleY(e){ return e.kind==='ninja' ? 1.45 : 1.2; }
 function drawEnemies(now){
   for(const e of enemies){
-    const ey=1.2+Math.sin(e.bob)*0.15;
     const yaw=Math.atan2(P.x-e.x,P.z-e.z);
+    if(e.kind==='ninja'){
+      const run=Math.sin(ninjaStride(e));
+      const nm=M(mT(e.x,ninjaBobY(e),e.z),mRy(yaw),mRx(0.12));
+      const h=drawNinja(nm,NPAL[e.pi],run,e.arm,e.bob*0.55);
+      /* atışa hazırlanırken elinde şuriken enerjisi toplanır */
+      if(e.arm>0.15){
+        const sc=0.06+e.arm*0.13;
+        draw(GEO.sph,M(nm,mT(h.hx,h.hy+0.14,h.hz+0.1),mS(sc,sc,sc)),NPAL[e.pi].ACC,1);
+      }
+      continue;
+    }
+    const ey=eyOf(e);
     const em=M(mT(e.x,ey,e.z),mRy(yaw));
     const col=EPAL[e.pi][0];
     /* gövde + hayalet eteği */
@@ -782,8 +834,10 @@ function render(now){
   /* additive: aura, mermi parlaması, patlamalar */
   GL.blendFunc(GL.SRC_ALPHA,GL.ONE);
   for(const e of enemies){
-    const ey=1.2+Math.sin(e.bob)*0.15;
-    draw(GEO.sph,mModel(e.x,ey,e.z,0,2.0,2.1,2.0),EPAL[e.pi][0],1,0.09);
+    /* hayaletin geniş ruh aurası var; ninja etten kemikten → yalnızca ayak dibinde
+       kısık bir iz, yoksa katı gövde sisin içinde yüzüyormuş gibi görünüyor */
+    if(e.kind==='ninja') draw(GEO.sph,mModel(e.x,0.35,e.z,0,1.15,0.7,1.15),NPAL[e.pi].ACC,1,0.06);
+    else draw(GEO.sph,mModel(e.x,eyOf(e),e.z,0,2.0,2.1,2.0),EPAL[e.pi][0],1,0.09);
   }
   for(const s of shots)
     draw(GEO.sph,mModel(s.x,s.y,s.z,0,s.friendly?1.1:0.85,s.friendly?1.1:0.85,s.friendly?1.1:0.85),s.friendly?0xffa040:0xbb55ff,1,0.4);
