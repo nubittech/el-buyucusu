@@ -90,7 +90,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v6.4 · gece + bloom · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v7.0 · manzara · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -122,22 +122,44 @@ canvas{touch-action:none}
    ============================================================= */
 const TEMALAR={
   gunduz:{
-    gok:[0.83,0.88,0.95], sisMenzil:[26,86],
-    isik:[1.04,0.98,0.88], golge:[0.58,0.68,0.90],
+    /* gok = UFUK rengi (aynı zamanda sis rengi), gokUst = tepe noktası.
+       İkisinin arası gökyüzü shader'ında geçiliyor. */
+    gok:[0.86,0.90,0.96], gokUst:[0.44,0.58,0.82], sisMenzil:[26,86],
+    isik:[1.04,0.98,0.88], golge:[0.78,0.86,1.04],
     gunes:[0.55,0.62,0.48], bloomEsik:0.86, bloomGuc:0.45,
-    zemin:0xdfe7f1, karA:0xbccbe4, karB:0xd2dcec, izgara:0x93a8c8, izgaraA:0.18,
+    ayYon:[0.62,0.42,0.66],
+    ayRenk:[1.00,0.97,0.90], ayBoy:0.022, ayHale:0.40, yildiz:0.0,
+    zemin:0xdfe7f1, karA:0xbccbe4, karB:0xd2dcec,
     duvar:0xaebacd, engelA:0xaebedb, engelB:0x93a4c2, silindir:0x8d9db9,
-    agacA:0x6b7590, agacB:0x59637d,
+    dag:[0xa9b8d2,0x93a5c6,0x7b8fb6],       /* uzak→yakın sırt katmanları */
+    camGovde:0x6a6152, camA:0x5d7266, camB:0x4c6157, camKar:0xd8e3f2,
+    kayaA:0xc3cee0, kayaB:0xaebcd2, karTane:[1,1,1],
   },
   gece:{
     /* Ay ışığındaki kar koyu değil PARLAK — gökyüzü karın altında kalır.
-       Sıcak-soğuk ayrımı gündüzden daha keskin: ay soluk-sıcak, gölge derin mor. */
-    gok:[0.11,0.14,0.26], sisMenzil:[22,72],
-    isik:[1.00,0.96,0.86], golge:[0.26,0.34,0.62],
-    gunes:[0.42,0.70,0.40], bloomEsik:0.80, bloomGuc:0.60,
-    zemin:0x8fa6cc, karA:0x7185ad, karB:0x9db2d6, izgara:0x5d719c, izgaraA:0.22,
-    duvar:0x2f3a5c, engelA:0x4a5a86, engelB:0x3c4a71, silindir:0x36436a,
-    agacA:0x1e2740, agacB:0x161d33,
+       Sıcak-soğuk ayrımı gündüzden daha keskin: ay soluk-sıcak, gölge derin mor.
+       Ufuk tepeden AÇIK: ay pusu orada toplanıyor, uzak geometri oraya soluyor. */
+    gok:[0.34,0.39,0.56], gokUst:[0.05,0.07,0.17], sisMenzil:[24,78],
+    /* golge bir KARARTMA değil RENK KAYDIRMASI; büyüklüğü 1 civarında kalmalı.
+       [0.26,0.34,0.62] iken gölgeli yüzler 3 kat birden kısılıyordu (hem bant
+       terimi hem bu) ve kayalar karın üstünde siyah leke gibi duruyordu. */
+    isik:[1.00,0.96,0.86], golge:[0.60,0.70,1.02],
+    /* Gölge tabanı yükselince aydınlık kar 0.80 eşiğini geçti ve zeminin yarısı
+       beyaza patladı. Eşik yalnız GERÇEKTEN parlak şeyleri (ay, mermi) alacak
+       biçimde yukarı çekildi. */
+    gunes:[0.42,0.70,0.40], bloomEsik:0.94, bloomGuc:0.55,
+    /* ayYon gölgelendirme ışığından (gunes) AYRI: gunes kasten yatık, yoksa
+       zemin tek banda düşüp fırça dokusu kayboluyor. Görünen ay o yükseklikte
+       karenin dışında kalıyordu — aynı azimutta ama alçak bir diske alındı. */
+    ayYon:[0.69,0.31,0.65],
+    ayRenk:[1.00,0.97,0.88], ayBoy:0.020, ayHale:0.34, yildiz:0.7,
+    zemin:0x7f95c0, karA:0x6a7ea6, karB:0x8ea3c9,
+    /* duvar = kar seti; koyu olunca ufku kesen bir çit gibi duruyordu.
+       engel/silindir artık kaya ve buz: siyah leke değil, kar altında hacim. */
+    duvar:0x8098c0, engelA:0x63769e, engelB:0x4e5f83, silindir:0x93aad4,
+    dag:[0x46527a,0x333e63,0x232c4c],
+    camGovde:0x191d30, camA:0x1b2b40, camB:0x131f31, camKar:0x8ea4c8,
+    kayaA:0x63769e, kayaB:0x4e5f83, karTane:[0.86,0.92,1.0],
   },
 };
 const TEMA=TEMALAR.gece;
@@ -161,7 +183,7 @@ const statusEl=document.getElementById('status'), scoreEl=document.getElementByI
 const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById('hpLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v6.4 · gece + bloom · motor hazır ✓';
+document.getElementById('subLine').textContent='v7.0 · manzara · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -279,7 +301,9 @@ void main(){
          +smoothstep(0.48,0.55,dif)*0.34
          +smoothstep(0.76,0.83,dif)*0.32;
   vec3 isik=mix(uCool,uWarm,b);                 /* gölge soğuk, ışık sıcak */
-  vec3 col=uColor*(0.62+0.62*b)*isik;
+  /* Taban 0.62 → 0.72: karlı sahnede gölge SİYAH değil, ay ışığını yansıtan
+     açık mavi. Karartmayı yalnız bu terim yapıyor, renk kaydırması ayrı. */
+  vec3 col=uColor*(0.70+0.46*b)*isik;
   col*=0.86+fr*0.28;                            /* yüzeye fırça değeri */
   /* kenar ışığı: siluetin dış hattında soluk bir kaçak ışık */
   vec3 v=normalize(uCam-vW);
@@ -379,6 +403,202 @@ void main(){
   /* ekleyerek birleştir; hale zaten eşiklenmiş olduğu için karanlığı kirletmez */
   gl_FragColor=vec4(s+h*uGuc,1.0);
 }`);
+/* =============================================================
+   GÖKYÜZÜ — tam ekran, ışın yönünden hesaplanıyor
+   Düz clearColor karenin üst yarısını boş bırakıyordu. Referans görselde o
+   yarı boş değil: tepede koyu, ufka doğru açılan bir gradyan, ayın çevresinde
+   toplanan pus ve ufuk hattında ince bir aydınlanma var. Kamera matrisini ters
+   çevirmek yerine kamera tabanını (sağ/yukarı/ileri) uniform geçip her piksel
+   için ışın yönü kuruyoruz — daha ucuz ve WebGL1'de mat4 tersi zaten yok.
+   ============================================================= */
+const progGok=tamEkranProg(`
+precision mediump float; varying vec2 vT;
+uniform vec3 uSag,uYuk,uIleri;      /* kamera tabanı */
+uniform vec2 uTan;                  /* tan(fov/2)*en_boy, tan(fov/2) */
+uniform vec3 uUst,uUfuk,uAy,uAyRenk;
+uniform float uAyBoy,uAyHale,uYildiz;
+/* değer gürültüsü — yıldız serpmek için, doku harcamadan */
+float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+void main(){
+  vec2 s=vT*2.0-1.0;
+  vec3 r=normalize(uIleri + uSag*s.x*uTan.x + uYuk*s.y*uTan.y);
+  float h=r.y;
+  /* Gradyan ufka yakınken hızlı, tepeye doğru yavaş açılsın: pow ile eğriltiyoruz.
+     Doğrusal gradyan "poster" gibi duruyor, bu daha atmosferik. */
+  float t=pow(clamp(h,0.0,1.0),0.42);
+  vec3 col=mix(uUfuk,uUst,t);
+  /* ufuk çizgisinin hemen üstünde toplanan pus şeridi */
+  col=mix(col,uUfuk*1.12,smoothstep(0.22,0.0,abs(h))*0.55);
+  /* yıldızlar — yalnız tepeye doğru, ufuk pusunda kaybolsunlar */
+  if(uYildiz>0.0){
+    vec2 g=floor(r.xz/max(abs(r.y),0.08)*46.0);
+    float n=hash(g);
+    /* Seyrek tutuluyor: sık yıldız kar taneleriyle karışıyor, ikisi de küçük
+       açık nokta. Yıldız az ve sabit, kar çok ve hareketli olsun. */
+    float yl=smoothstep(0.9986,0.99995,n)*smoothstep(0.02,0.42,h)*uYildiz;
+    col+=vec3(0.9,0.94,1.0)*yl;
+  }
+  /* ay: sert disk + geniş hale. Hale disk'ten çok daha güçlü katkı veriyor,
+     gökyüzünü asıl "aydınlık" gösteren şey o. */
+  float d=max(dot(r,normalize(uAy)),0.0);
+  col+=uAyRenk*pow(d,600.0)*0.55;                     /* hale çekirdeği */
+  col+=uAyRenk*uAyHale*pow(d,11.0)*0.30;              /* geniş kirlenme */
+  col+=uAyRenk*smoothstep(1.0-uAyBoy*uAyBoy,1.0-uAyBoy*uAyBoy*0.45,d)*0.95; /* disk */
+  gl_FragColor=vec4(col,1.0);
+}`);
+const UG={};
+['uSag','uYuk','uIleri','uTan','uUst','uUfuk','uAy','uAyRenk','uAyBoy','uAyHale','uYildiz']
+  .forEach(n=>UG[n]=GL.getUniformLocation(progGok,n));
+function gokCiz(){
+  GL.useProgram(progGok);
+  GL.disable(GL.DEPTH_TEST); GL.disable(GL.BLEND);
+  /* Kamera tabanı: ileri vektöründen sağ ve yukarıyı türet.
+     sag = ileri × dünya_yukarı,  yukarı = sag × ileri.
+     Sırayı ters yazmak ikisini birden çevirir ve gökyüzü baş aşağı gelir —
+     tepe rengi ufka, ufuk tepeye düşer. */
+  const f=[camFx,camFy,camFz];
+  let rx=-f[2],ry=0,rz=f[0];
+  const rl=Math.hypot(rx,ry,rz)||1; rx/=rl;ry/=rl;rz/=rl;
+  const ux=ry*f[2]-rz*f[1], uy=rz*f[0]-rx*f[2], uz=rx*f[1]-ry*f[0];
+  GL.uniform3f(UG.uSag,rx,ry,rz);
+  GL.uniform3f(UG.uYuk,ux,uy,uz);
+  GL.uniform3f(UG.uIleri,f[0],f[1],f[2]);
+  const th=Math.tan(FOV/2);
+  GL.uniform2f(UG.uTan,th*(W/H),th);
+  GL.uniform3f(UG.uUst,...TEMA.gokUst);
+  GL.uniform3f(UG.uUfuk,...TEMA.gok);
+  GL.uniform3f(UG.uAy,...TEMA.ayYon);
+  GL.uniform3f(UG.uAyRenk,...TEMA.ayRenk);
+  GL.uniform1f(UG.uAyBoy,TEMA.ayBoy);
+  GL.uniform1f(UG.uAyHale,TEMA.ayHale);
+  GL.uniform1f(UG.uYildiz,TEMA.yildiz);
+  tamEkranCiz();
+  GL.enable(GL.DEPTH_TEST);
+}
+/* =============================================================
+   DAĞLAR — ışıklandırılmamış silüet halkaları
+   Ana shader kullanılamıyor: sırtlar sis menzilinin (78) çok ötesinde, uFogCol
+   hepsini yutardı. Kendi programı hem rengi tam kontrol ettiriyor hem de ayrı
+   bir izdüşümle çiziliyor (ana far düzlemi 120, sırtlar 300'de).
+   ============================================================= */
+const progDag=(()=>{
+  const p=GL.createProgram();
+  GL.attachShader(p,sh(GL.VERTEX_SHADER,`
+attribute vec3 aP; attribute vec3 aN;
+uniform mat4 uV,uPr; varying float vT;
+void main(){ vT=aN.y; gl_Position=uPr*uV*vec4(aP,1.0); }`));
+  GL.attachShader(p,sh(GL.FRAGMENT_SHADER,`
+precision mediump float; varying float vT;
+uniform vec3 uTaban,uZirve;
+void main(){
+  /* taban ufuk pusuna gömülür, zirve ayrışır — hava perspektifi budur */
+  gl_FragColor=vec4(mix(uTaban,uZirve,pow(vT,0.75)),1.0);
+}`));
+  GL.linkProgram(p);
+  if(!GL.getProgramParameter(p,GL.LINK_STATUS)) throw new Error(GL.getProgramInfoLog(p));
+  return p;
+})();
+const UD={};['uV','uPr','uTaban','uZirve'].forEach(n=>UD[n]=GL.getUniformLocation(progDag,n));
+function daglarCiz(view){
+  GL.useProgram(progDag);
+  GL.disable(GL.DEPTH_TEST); GL.disable(GL.BLEND);
+  GL.uniformMatrix4fv(UD.uPr,false,mPersp(FOV,W/H,1,900));   /* uzak far düzlemi */
+  GL.uniformMatrix4fv(UD.uV,false,view);
+  const aP=GL.getAttribLocation(progDag,'aP'),aN=GL.getAttribLocation(progDag,'aN');
+  GL.enableVertexAttribArray(aP);GL.enableVertexAttribArray(aN);
+  const uf=TEMA.gok;
+  GEO.sirt.forEach((g,i)=>{
+    const c=TEMA.dag[i], zr=[(c>>16&255)/255,(c>>8&255)/255,(c&255)/255];
+    /* uzak katmanın tabanı tamamen pusa gömülü, yakın katman daha ayrık */
+    const k=0.12+i*0.16;
+    GL.uniform3f(UD.uTaban,uf[0]*(1-k)+zr[0]*k,uf[1]*(1-k)+zr[1]*k,uf[2]*(1-k)+zr[2]*k);
+    GL.uniform3f(UD.uZirve,...zr);
+    GL.bindBuffer(GL.ARRAY_BUFFER,g.vb);GL.vertexAttribPointer(aP,3,GL.FLOAT,false,0,0);
+    GL.bindBuffer(GL.ARRAY_BUFFER,g.nb);GL.vertexAttribPointer(aN,3,GL.FLOAT,false,0,0);
+    GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER,g.ib);
+    GL.drawElements(g.mode,g.count,GL.UNSIGNED_SHORT,0);
+  });
+  GL.enable(GL.DEPTH_TEST);
+}
+/* =============================================================
+   KAR TANELERİ — GL.POINTS, tamamen shader'da hareket eden
+   CPU'da parçacık güncellemek gereksiz: konum zamanın kapalı formu. Taneler
+   kameranın etrafındaki bir kutuda sarmalanıyor, böylece arena neresi olursa
+   olsun kar hep etrafında yağıyor.
+   ============================================================= */
+/* Kutu dar tutuldu (40): 64'te tanelerin çoğu 25-45 birim uzakta kalıyor,
+   alt piksele düşüp yıldızdan ayırt edilemiyorlardı. Dar kutu = yakın tane. */
+const KUTU=40;
+const progKar=(()=>{
+  const p=GL.createProgram();
+  GL.attachShader(p,sh(GL.VERTEX_SHADER,`
+attribute vec3 aP;      /* kutu içi başlangıç konumu */
+attribute vec3 aN;      /* (faz, düşüş hızı, boy) */
+uniform mat4 uV,uPr; uniform vec3 uCamP; uniform float uT,uKutu,uOlcek;
+varying float vA;
+void main(){
+  float k=uKutu;
+  vec3 o=vec3(floor(uCamP.x/k+0.5)*k,0.0,floor(uCamP.z/k+0.5)*k);
+  float ph=aN.x*6.283185;
+  float x=aP.x+sin(uT*0.55+ph)*1.5;        /* yalpalama */
+  float z=aP.z+cos(uT*0.41+ph*1.7)*1.2;
+  float y=mod(aP.y-uT*aN.y,k);
+  vec3 w=vec3(mod(x+k*0.5,k)-k*0.5, y, mod(z+k*0.5,k)-k*0.5)+o;
+  vec4 vp=uV*vec4(w,1.0);
+  gl_Position=uPr*vp;
+  float d=-vp.z;
+  /* aN.z tanenin DÜNYA yarıçapı; piksele çevirmek için görüntü yüksekliği ve
+     fov gerekiyor (uOlcek = boy / (2*tan(fov/2))). Sabit bir çarpan kullanınca
+     taneler alt piksel kalıyordu — hiç görünmüyorlardı. */
+  gl_PointSize=max(aN.z*uOlcek/max(d,0.6),1.0);
+  /* burnun dibinde ve pusun içinde sön */
+  vA=smoothstep(0.0,3.0,d)*smoothstep(40.0,20.0,d);
+}`));
+  GL.attachShader(p,sh(GL.FRAGMENT_SHADER,`
+precision mediump float; varying float vA; uniform vec3 uRenk;
+void main(){
+  vec2 c=gl_PointCoord*2.0-1.0;
+  float r=dot(c,c);
+  if(r>1.0) discard;
+  float a=(1.0-r)*(1.0-r)*vA*0.8;
+  gl_FragColor=vec4(uRenk,a);
+}`));
+  GL.linkProgram(p);
+  if(!GL.getProgramParameter(p,GL.LINK_STATUS)) throw new Error(GL.getProgramInfoLog(p));
+  return p;
+})();
+const UK={};['uV','uPr','uCamP','uT','uKutu','uRenk','uOlcek'].forEach(n=>UK[n]=GL.getUniformLocation(progKar,n));
+/* KARP — kar parçacıkları. (KAR adı zaten zemindeki gölge yamalarında.) */
+const KAR_N=900, KARP={};
+{ let s=0x1234abc; const rnd=()=>((s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff);
+  const P=[],Q=[];
+  for(let i=0;i<KAR_N;i++){
+    P.push((rnd()-0.5)*KUTU, rnd()*KUTU, (rnd()-0.5)*KUTU);
+    Q.push(rnd(), 1.6+rnd()*3.4, 0.035+rnd()*0.075);   /* faz, düşüş hızı, dünya yarıçapı */
+  }
+  KARP.vb=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,KARP.vb);
+  GL.bufferData(GL.ARRAY_BUFFER,new Float32Array(P),GL.STATIC_DRAW);
+  KARP.nb=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,KARP.nb);
+  GL.bufferData(GL.ARRAY_BUFFER,new Float32Array(Q),GL.STATIC_DRAW);
+}
+function karCiz(view,proj,t){
+  GL.useProgram(progKar);
+  GL.enable(GL.BLEND);GL.blendFunc(GL.SRC_ALPHA,GL.ONE_MINUS_SRC_ALPHA);
+  GL.depthMask(false);                       /* sahneye karşı test var, yazma yok */
+  GL.uniformMatrix4fv(UK.uPr,false,proj);
+  GL.uniformMatrix4fv(UK.uV,false,view);
+  GL.uniform3f(UK.uCamP,camX,camY,camZ);
+  GL.uniform1f(UK.uT,t*0.001);
+  GL.uniform1f(UK.uKutu,KUTU);
+  GL.uniform1f(UK.uOlcek,(POST.boy||H)/(2*Math.tan(FOV/2)));
+  GL.uniform3f(UK.uRenk,...TEMA.karTane);
+  const aP=GL.getAttribLocation(progKar,'aP'),aN=GL.getAttribLocation(progKar,'aN');
+  GL.enableVertexAttribArray(aP);GL.enableVertexAttribArray(aN);
+  GL.bindBuffer(GL.ARRAY_BUFFER,KARP.vb);GL.vertexAttribPointer(aP,3,GL.FLOAT,false,0,0);
+  GL.bindBuffer(GL.ARRAY_BUFFER,KARP.nb);GL.vertexAttribPointer(aN,3,GL.FLOAT,false,0,0);
+  GL.drawArrays(GL.POINTS,0,KAR_N);
+  GL.depthMask(true);
+}
 function dokuYap(en,boy){
   const t=GL.createTexture();
   GL.bindTexture(GL.TEXTURE_2D,t);
@@ -468,7 +688,9 @@ function bloomUygula(){
 
 /* --- geometri üreticileri --- */
 function mesh(pos,nor,idx,mode){
-  const m={mode:mode||GL.TRIANGLES,count:idx.length};
+  /* p/n/i CPU tarafında saklanıyor: statik dekoru tek meshe kaynatmak için
+     ham veri gerekiyor (bkz. birlestir). Zaten ayrılmış diziler, ek maliyet yok. */
+  const m={mode:mode||GL.TRIANGLES,count:idx.length,p:pos,n:nor,i:idx};
   m.vb=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,m.vb);GL.bufferData(GL.ARRAY_BUFFER,new Float32Array(pos),GL.STATIC_DRAW);
   m.nb=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,m.nb);GL.bufferData(GL.ARRAY_BUFFER,new Float32Array(nor),GL.STATIC_DRAW);
   m.ib=GL.createBuffer();GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER,m.ib);GL.bufferData(GL.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),GL.STATIC_DRAW);
@@ -540,17 +762,179 @@ function torusGeo(su,sv,rr){ /* ana yarıçap .5 */
     ix.push(a,b,a+1,b,b+1,a+1);}
   return mesh(p,n,ix);
 }
-function gridGeo(half,step){
-  const p=[],n=[],ix=[];let k=0;
-  for(let v=-half;v<=half;v+=step){
-    p.push(-half,0,v, half,0,v, v,0,-half, v,0,half);
-    n.push(0,1,0, 0,1,0, 0,1,0, 0,1,0);
-    ix.push(k,k+1,k+2,k+3);k+=4;}
-  return mesh(p,n,ix,GL.LINES);
+/* --- ÇAM: dört kademe koni, tek mesh (gövde ayrı silindirle çiziliyor) ------
+   Arenayı çevreleyen "ağaçlar" ince silindirdi ve direk gibi duruyordu. Siluet
+   üslubun yarısı: koni yığını uzaktan bile çam okunuyor, silindir okunmuyor. */
+function camGeo(){
+  const p=[],n=[],ix=[];
+  const koni=(y0,h,r,seg)=>{
+    const b=p.length/3, nl=Math.hypot(h,r);
+    for(let j=0;j<=seg;j++){
+      const a=j/seg*6.283185,cx=Math.cos(a),cz=Math.sin(a);
+      const nx=cx*h/nl,ny=r/nl,nz=cz*h/nl;
+      p.push(cx*r,y0,cz*r);   n.push(nx,ny,nz);
+      p.push(0,y0+h,0);       n.push(nx,ny,nz);
+    }
+    for(let j=0;j<seg;j++){const a=b+j*2;ix.push(a,a+1,a+2);}
+    /* etek: alttan bakınca koni içi boş görünmesin */
+    const c0=p.length/3;
+    for(let j=0;j<=seg;j++){const a=j/seg*6.283185;p.push(Math.cos(a)*r,y0,Math.sin(a)*r);n.push(0,-1,0);}
+    p.push(0,y0,0);n.push(0,-1,0);const c=p.length/3-1;
+    for(let j=0;j<seg;j++)ix.push(c0+j,c,c0+j+1);
+  };
+  koni(0.14,0.36,0.250,9); koni(0.36,0.31,0.196,9);
+  koni(0.56,0.28,0.146,9); koni(0.75,0.25,0.096,9);
+  return mesh(p,n,ix);
+}
+/* --- KAYA: bozulmuş küre, düz gölgelemeli ---------------------------------
+   Siper kutuları sandık gibi duruyordu. Köşeleri hash'le dışarı itilmiş,
+   tabanı düzleştirilmiş bir küre kar altındaki kayayı okutuyor. Normaller
+   yüz başına hesaplanıyor (paylaşılan değil) → düşük poligon kırılmaları. */
+function kayaGeo(seed,puruz){
+  let s=seed>>>0; const rnd=()=>((s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff);
+  const la=5,lo=8,V=[];
+  const bozma=[];
+  for(let i=0;i<=la;i++){ bozma[i]=[]; for(let j=0;j<lo;j++) bozma[i][j]=1+(rnd()-0.5)*puruz; }
+  for(let i=0;i<=la;i++){
+    const th=i/la*Math.PI,st=Math.sin(th),ct=Math.cos(th),row=[];
+    for(let j=0;j<=lo;j++){
+      const ph=j/lo*6.283185, k=bozma[i][j%lo];          /* j==lo → j==0: dikiş kapanır */
+      let x=st*Math.cos(ph)*0.5*k, y=ct*0.5*k, z=st*Math.sin(ph)*0.5*k;
+      row.push([x,Math.max(y,-0.46)+0.5,z]);             /* taban düzleşir, y 0..1 */
+    }
+    V.push(row);
+  }
+  const p=[],n=[],ix=[];
+  const yuz=(a,b,c)=>{
+    const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2];
+    const vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+    let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+    const l=Math.hypot(nx,ny,nz)||1;nx/=l;ny/=l;nz/=l;
+    const b0=p.length/3;
+    [a,b,c].forEach(v=>{p.push(v[0],v[1],v[2]);n.push(nx,ny,nz);});
+    ix.push(b0,b0+1,b0+2);
+  };
+  for(let i=0;i<la;i++)for(let j=0;j<lo;j++){
+    const a=V[i][j],b=V[i+1][j],c=V[i+1][j+1],d=V[i][j+1];
+    yuz(a,b,c); yuz(a,c,d);
+  }
+  return mesh(p,n,ix);
+}
+/* --- KAR ZEMİNİ: arena düz, dışarısı tümsekli --------------------------------
+   Tek düz kutu + ızgara çizgisi prototip görüntüsü veriyordu. Arena içi
+   OYNANIŞ İÇİN düz kalmak zorunda (gölgeler ve siper yüksekliği y=0 varsayıyor),
+   dışarısı serbest: uzaklaştıkça büyüyen tümsekler arenayla dağlar arasına
+   orta zemin koyuyor. Fırça dokusu da ancak normal değişince görünüyor. */
+const ZEMIN_YARI=150, ZEMIN_DUZ=34;
+/* Zemin yüksekliği TEK kaynak: hem mesh hem ağaç yerleşimi bunu kullanıyor.
+   Ayrı hesaplansaydı uzak çamlar tümseklerin üstünde havada kalırdı. */
+function zeminY(x,z){
+  const d=Math.hypot(x,z);
+  const k=smootherstep(ZEMIN_DUZ,ZEMIN_YARI*0.92,d);               /* arena içi 0 */
+  return k*( Math.sin(x*0.043)*Math.cos(z*0.037)*5.2
+           + Math.sin((x+z)*0.021+1.7)*3.4
+           + Math.sin(x*0.11+z*0.08)*0.9 );
+}
+function karZeminGeo(half,seg){
+  const yuk=zeminY;
+  const p=[],n=[],ix=[],e=half/seg;
+  for(let i=0;i<=seg;i++)for(let j=0;j<=seg;j++){
+    const x=-half+i/seg*half*2, z=-half+j/seg*half*2;
+    p.push(x,yuk(x,z),z);
+    const dx=yuk(x+e,z)-yuk(x-e,z), dz=yuk(x,z+e)-yuk(x,z-e);
+    let nx=-dx,ny=2*e,nz=-dz;const l=Math.hypot(nx,ny,nz)||1;
+    n.push(nx/l,ny/l,nz/l);
+  }
+  for(let i=0;i<seg;i++)for(let j=0;j<seg;j++){
+    const a=i*(seg+1)+j,b=a+seg+1;
+    ix.push(a,b,a+1,b,b+1,a+1);
+  }
+  return mesh(p,n,ix);
+}
+function smootherstep(a,b,x){const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*t*(t*(t*6-15)+10);}
+/* --- DAĞ SIRTI: ufku dolduran silüet halkası ---------------------------------
+   Ufuk boştu. Referans karenin yarısından fazlası katmanlı dağ; en büyük
+   görsel kazanç burada. Üç halka farklı yarıçap ve renkte → hava perspektifi.
+   aN.y'yi normal olarak DEĞİL, yükseklik oranı olarak taşıyoruz (0 taban,
+   1 zirve): sırtlar ışıklandırılmıyor, dikey gradyanla boyanıyor. */
+function sirtGeo(seed,yari,altY,ustY,seg,sivri){
+  let s=seed>>>0; const rnd=()=>((s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff);
+  const okt=[]; for(let k=0;k<4;k++) okt.push([2+k*3.17, rnd()*6.283185, 1/(k+1.35)]);
+  const p=[],n=[],ix=[];
+  for(let j=0;j<=seg;j++){
+    const a=j/seg*6.283185;
+    let v=0,w=0;
+    for(const[f,ph,am]of okt){ v+=Math.sin(a*f+ph)*am; w+=am; }
+    v=v/w*0.5+0.5;                                   /* 0..1 */
+    v=Math.pow(v,sivri);                             /* >1 → sivri zirveler */
+    const y=altY+(ustY-altY)*v;
+    const cx=Math.cos(a)*yari, cz=Math.sin(a)*yari;
+    p.push(cx,-6,cz);  n.push(0,0,0);                /* taban ufkun altına iner */
+    p.push(cx, y,cz);  n.push(0,1,0);
+  }
+  for(let j=0;j<seg;j++){const a=j*2;ix.push(a,a+2,a+1,a+1,a+2,a+3);}
+  return mesh(p,n,ix);
 }
 const GEO={box:boxGeo(),sph:sphereGeo(11,15),cone:coneGeo(12),cyl:cylGeo(12),disc:discGeo(14),
-  torus:torusGeo(14,8,0.14),grid:gridGeo(33,3)};
+  torus:torusGeo(14,8,0.14),cam:camGeo(),
+  kaya:[kayaGeo(0x51f3,0.62),kayaGeo(0x9ac1,0.74),kayaGeo(0x2e77,0.55),kayaGeo(0xbb40,0.70)],
+  zemin:karZeminGeo(ZEMIN_YARI,74),
+  sirt:[sirtGeo(0xa17,300,16,86,84,1.5),
+        sirtGeo(0x5c3,205,11,54,72,1.7),
+        sirtGeo(0x77e,140, 7,31,64,2.0)]};
 
+/* =============================================================
+   STATİK DEKOR KAYNAĞI
+   130 çam × (gövde + tepe + kar başlığı) + kayalar + duvarlar = ~350 çizim
+   çağrısı. Mobilde asıl maliyet üçgen değil çağrı sayısı. Dekor hiç
+   kıpırdamadığı için dönüşümleri köşe noktalarına bir kez pişirip renk başına
+   TEK meshe indiriyoruz: ~350 → ~8.
+   ============================================================= */
+function m3tersDevrik(m){
+  /* normal dönüşümü = üst 3×3'ün tersinin devriği; ölçek düzgün değilse
+     ham 3×3 ile çarpmak normalleri eğriltir (çam konileri ölçekli) */
+  const a=m[0],b=m[1],c=m[2],d=m[4],e=m[5],f=m[6],g=m[8],h=m[9],i=m[10];
+  const A=e*i-f*h,B=f*g-d*i,C=d*h-e*g;
+  let det=a*A+b*B+c*C; if(Math.abs(det)<1e-9) det=1e-9;
+  const s=1/det;
+  /* ters = adj/det, sonra devrik → satır/sütun yer değiştirir */
+  return [A*s,B*s,C*s,
+          (c*h-b*i)*s,(a*i-c*g)*s,(b*g-a*h)*s,
+          (b*f-c*e)*s,(c*d-a*f)*s,(a*e-b*d)*s];
+}
+const BIRIM=mModel(0,0,0,0,1,1,1);   /* kaynatılmış mesh dünya uzayında zaten */
+function birlestir(liste){
+  const grup=new Map();
+  for(const s of liste){
+    const k=s.color+'|'+(s.emiss||0);
+    if(!grup.has(k)) grup.set(k,{color:s.color,emiss:s.emiss||0,parca:[]});
+    grup.get(k).parca.push(s);
+  }
+  const cikti=[];
+  for(const g of grup.values()){
+    let p=[],n=[],ix=[];
+    const bosalt=()=>{ if(ix.length) cikti.push({geo:mesh(p,n,ix),model:BIRIM,color:g.color,emiss:g.emiss}); p=[];n=[];ix=[]; };
+    for(const s of g.parca){
+      const src=s.geo, m=s.model, nm=m3tersDevrik(m), vs=src.p.length/3;
+      /* Uint16 indeks sınırı: dolmadan önce parçayı kapat */
+      if(p.length/3+vs>65000) bosalt();
+      const base=p.length/3;
+      for(let k=0;k<vs;k++){
+        const x=src.p[k*3],y=src.p[k*3+1],z=src.p[k*3+2];
+        p.push(m[0]*x+m[4]*y+m[8]*z+m[12],
+               m[1]*x+m[5]*y+m[9]*z+m[13],
+               m[2]*x+m[6]*y+m[10]*z+m[14]);
+        const a=src.n[k*3],b=src.n[k*3+1],c=src.n[k*3+2];
+        let nx=nm[0]*a+nm[3]*b+nm[6]*c, ny=nm[1]*a+nm[4]*b+nm[7]*c, nz=nm[2]*a+nm[5]*b+nm[8]*c;
+        const l=Math.hypot(nx,ny,nz)||1;
+        n.push(nx/l,ny/l,nz/l);
+      }
+      for(let k=0;k<src.i.length;k++) ix.push(base+src.i[k]);
+    }
+    bosalt();
+  }
+  return cikti;
+}
 function draw(geo,model,color,emiss,alpha){
   GL.uniformMatrix4fv(U.uM,false,model);
   GL.uniform3f(U.uColor,(color>>16&255)/255,(color>>8&255)/255,(color&255)/255);
@@ -576,14 +960,22 @@ let camYaw=0,camX=0,camY=4.6,camZ=-8,camFx=0,camFy=0,camFz=1;
 
 /* engeller: {minx,maxx,minz,maxz,h,geo,model,color} */
 const OBS=[],STAT=[];
-function addObs(x,z,w,d,h,color,cyl){
+let kayaSayac=0;
+function addObs(x,z,w,d,h,color,cyl,duz){
   OBS.push({minx:x-w/2,maxx:x+w/2,minz:z-d/2,maxz:z+d/2,h});
-  if(cyl) STAT.push({geo:GEO.cyl,model:mModel(x,0,z,0,w,h,d),color,emiss:0});
-  else STAT.push({geo:GEO.box,model:mModel(x,h/2,z,0,w,h,d),color,emiss:0});
+  if(duz){ STAT.push({geo:GEO.box,model:mModel(x,h/2,z,0,w,h,d),color,emiss:0}); return; }
+  if(cyl){
+    /* buz kulesi: yukarı doğru daralan koni — silindir hiçbir şeye benzemiyordu */
+    STAT.push({geo:GEO.cone,model:mModel(x,0,z,0,w*1.15,h*1.5,d*1.15),color,emiss:0});
+  } else {
+    /* siper kutusu yerine kar altında kaya; çarpışma kutusu aynı kalıyor */
+    const g=GEO.kaya[kayaSayac++%GEO.kaya.length];
+    STAT.push({geo:g,model:mModel(x,0,z,(kayaSayac*1.7)%6.283,w*1.18,h*1.12,d*1.18),color,emiss:0});
+  }
 }
-/* duvarlar */
-addObs(0,-AR-1,AR*2+4,2,2.6,TEMA.duvar);addObs(0,AR+1,AR*2+4,2,2.6,TEMA.duvar);
-addObs(-AR-1,0,2,AR*2+4,2.6,TEMA.duvar);addObs(AR+1,0,2,AR*2+4,2.6,TEMA.duvar);
+/* duvarlar — kutu kalıyor (arena sınırı okunaklı olmalı), duz=true */
+addObs(0,-AR-1,AR*2+4,2,2.6,TEMA.duvar,false,true);addObs(0,AR+1,AR*2+4,2,2.6,TEMA.duvar,false,true);
+addObs(-AR-1,0,2,AR*2+4,2.6,TEMA.duvar,false,true);addObs(AR+1,0,2,AR*2+4,2.6,TEMA.duvar,false,true);
 /* Kar gölgesi yamaları — deterministik, zemine değer katıyor */
 const KAR=[];
 { let r=12345; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
@@ -592,15 +984,29 @@ const KAR=[];
     KAR.push([Math.cos(a)*d, Math.sin(a)*d, 3+rnd()*7, rnd()*6.283,
               rnd()<0.5?TEMA.karA:TEMA.karB]);
   } }
-/* Değer çıpası: arena çevresinde ince koyu ağaç gövdeleri. Referansta soluk
-   karın okunmasını sağlayan şey bu koyu dikeyler; onlar olmadan her şey
-   yıkanmış görünüyor. */
+/* ÇAM ORMANI — arenayı çevreleyen üç kuşak.
+   Değer çıpası: soluk karın okunmasını sağlayan şey bu koyu dikeyler. Ama asıl
+   iş siluet: koni yığını çam okunuyor, silindir direk okunuyordu. Kuşak
+   uzaklaştıkça ağaç seyrekleşip küçülüyor ve rengi pusa yaklaşıyor — orman
+   kenarı tek bir duvar gibi durmasın, derinliğe dağılsın. */
 { let r=777; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
-  for(let i=0;i<34;i++){
-    const a=rnd()*6.283, d=AR-1.5+rnd()*7;
-    const x=Math.cos(a)*d, z=Math.sin(a)*d, h=5+rnd()*7;
-    STAT.push({geo:GEO.cyl,model:mModel(x,0,z,rnd()*0.4-0.2,0.34+rnd()*0.3,h,0.34+rnd()*0.3),
-               color:rnd()<0.5?TEMA.agacA:TEMA.agacB,emiss:0});
+  const KUSAK=[[AR+1.5, 7, 54, 1.00],[AR+9, 16, 46, 0.86],[AR+26, 34, 30, 0.68]];
+  for(const[ic,genis,adet,olcekK]of KUSAK){
+    for(let i=0;i<adet;i++){
+      const a=rnd()*6.283185, d=ic+rnd()*genis;
+      const x=Math.cos(a)*d, z=Math.sin(a)*d;
+      const y=zeminY(x,z)-0.2;                        /* tümsekli zemine otursun */
+      const h=(5.5+rnd()*7.5)*olcekK, g=(1.5+rnd()*1.1)*olcekK;
+      const yat=(rnd()-0.5)*0.13;                     /* hafif eğiklik: dizilmiş durmasın */
+      STAT.push({geo:GEO.cyl,model:mModel(x,y,z,yat,g*0.13,h*0.30,g*0.13),
+                 color:TEMA.camGovde,emiss:0});
+      STAT.push({geo:GEO.cam,model:mModel(x,y,z,yat,g,h,g),
+                 color:rnd()<0.5?TEMA.camA:TEMA.camB,emiss:0});
+      /* tepede kar tutmuş küçük koni — karanlık siluete tek açık nokta */
+      if(rnd()<0.55)
+        STAT.push({geo:GEO.cone,model:mModel(x,y+h*0.75,z,yat,g*0.20,h*0.20,g*0.20),
+                   color:TEMA.camKar,emiss:0});
+    }
   } }
 /* siperler (deterministik yerleşim) */
 [[6,4,0],[-7,6,0],[10,-6,1],[-11,-4,0],[3,12,0],[-4,-13,1],[14,8,0],[-15,10,0],[12,-14,1],[-9,-11,0],[0,-8,0],[-2,18,1],[18,-2,0],[-19,-8,0]]
@@ -608,6 +1014,12 @@ const KAR=[];
   if(s[2]) addObs(s[0],s[1],1.6,1.6,2.5,TEMA.silindir,true);
   else addObs(s[0],s[1],2.2+(i%3)*0.7,1.7+(i%2)*0.9,1.35+(i%4)*0.35,i%2?TEMA.engelA:TEMA.engelB);
 });
+/* Kar gölge yamaları da statik — kaynağa dahil (26 çağrı daha eksilir) */
+for(const y of KAR)
+  STAT.push({geo:GEO.disc,model:mModel(y[0],0.028,y[1],y[3],y[2],1,y[2]*0.72),color:y[4],emiss:0});
+/* Dekor tamamlandı — renk başına tek meshe kaynat. Bundan sonra STAT'a
+   ekleme yapılırsa DEKOR'a yansımaz; sahne kurulumu burada bitiyor. */
+const DEKOR=birlestir(STAT);
 
 /* --- çarpışma yardımcıları --- */
 function pushOut(o,r){
@@ -1214,21 +1626,26 @@ function drawEnemies(now){
 function render(now){
   /* Sahne doğrudan ekrana değil, bloom için dokuya çiziliyor. */
   if(POST.sahne){ GL.bindFramebuffer(GL.FRAMEBUFFER,POST.sahne); GL.viewport(0,0,POST.en,POST.boy); }
-  GL.clearColor(TEMA.gok[0],TEMA.gok[1],TEMA.gok[2],1);
   GL.clear(GL.COLOR_BUFFER_BIT|GL.DEPTH_BUFFER_BIT);
-  GL.uniformMatrix4fv(U.uPr,false,mPersp(FOV,W/H,0.1,120));
-  GL.uniformMatrix4fv(U.uV,false,mLookAt(camX,camY,camZ,camX+camFx*10,camY+camFy*10,camZ+camFz*10));
+  const PROJ=mPersp(FOV,W/H,0.1,220);
+  const VIEW=mLookAt(camX,camY,camZ,camX+camFx*10,camY+camFy*10,camZ+camFz*10);
+  /* 1) gökyüzü — derinlik yok, her şeyin arkası
+     2) dağlar — kendi uzak izdüşümüyle, hâlâ derinlik yazmadan
+     Bu ikisi clearColor'ın yerini aldı; artık karenin üst yarısı boş değil. */
+  gokCiz();
+  daglarCiz(VIEW);
+  GL.clear(GL.DEPTH_BUFFER_BIT);           /* sahne temiz derinlikle başlasın */
+  GL.useProgram(prog);
+  GL.enableVertexAttribArray(A.aP);GL.enableVertexAttribArray(A.aN);
+  GL.uniformMatrix4fv(U.uPr,false,PROJ);
+  GL.uniformMatrix4fv(U.uV,false,VIEW);
   GL.uniform3f(U.uCam,camX,camY,camZ);
   GL.disable(GL.BLEND);GL.depthMask(true);
-  /* zemin + ızgara */
-  draw(GEO.box,mModel(0,-0.06,0,0,AR*2+6,0.1,AR*2+6),TEMA.zemin,0);   /* kar zemini */
-  /* Kar üstündeki gölge lekeleri. Referanstaki karın düz beyaz olmamasının
-     sebebi bu — doku yok, onun yerine hafif farklı tonda geniş yamalar. */
-  /* Opak çiziliyorlar: bu aşamada harmanlama kapalı, alfa yok sayılırdı. */
-  for(const y of KAR) draw(GEO.disc,mModel(y[0],0.028,y[1],y[3],y[2],1,y[2]*0.72),y[4],0);
-  draw(GEO.grid,mModel(0,0.035,0,0,1,1,1),TEMA.izgara,TEMA.izgaraA);
-  /* engeller */
-  for(const s of STAT) draw(s.geo,s.model,s.color,s.emiss);
+  /* kar zemini: arena içi düz, dışarısı tümsekli, 150 birime kadar uzanıyor */
+  draw(GEO.zemin,mModel(0,-0.02,0,0,1,1,1),TEMA.zemin,0);
+  /* Kar gölge lekeleri artık DEKOR içinde (kaynatıldı).
+     engeller + çevre + lekeler: kaynatılmış, renk başına tek çağrı */
+  for(const s of DEKOR) draw(s.geo,s.model,s.color,s.emiss);
   /* karakterler */
   drawWizard(now,RDT);
   drawEnemies(now);
@@ -1266,6 +1683,10 @@ function render(now){
     const t=f.t/0.45,sc=(0.4+t*2.2)*f.scale;
     draw(GEO.sph,mModel(f.x,f.y,f.z,0,sc,sc,sc),f.color,1,(1-t)*0.85);
   }
+  /* kar en sonda: sahneye karşı derinlik testli, kendi programıyla */
+  karCiz(VIEW,PROJ,now);
+  GL.useProgram(prog);
+  GL.enableVertexAttribArray(A.aP);GL.enableVertexAttribArray(A.aN);
   GL.depthMask(true);GL.disable(GL.BLEND);
   if(POST.sahne) bloomUygula();       /* dokudaki sahneyi haleyle birlikte ekrana bas */
 }
