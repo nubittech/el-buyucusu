@@ -13,9 +13,11 @@ const src = HTML.slice(s + 8, e);
 const stub = `
  const localStorage={getItem:()=>null,setItem:()=>{},removeItem:()=>{}};
  const performance={now:()=>0};
+ const setTimeout=()=>0; const location={protocol:'https:',hostname:'x'};
  const _els={}; const document={getElementById:id=>(_els[id]=_els[id]||{
    style:{},classList:{toggle:()=>{},add:()=>{},remove:()=>{}},appendChild:()=>{},
    firstElementChild:{style:{}},getContext:()=>new Proxy({},{get:()=>()=>{}}),
+   addEventListener:()=>{},removeEventListener:()=>{},click:()=>{},
    set innerHTML(v){}, get innerHTML(){return ''}, set textContent(v){}, get textContent(){return ''},
    width:1,height:1}),createElement:()=>({style:{},classList:{},appendChild:()=>{},set textContent(v){}}) };
  const addEventListener=()=>{}; const requestAnimationFrame=()=>{};
