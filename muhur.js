@@ -47,7 +47,12 @@ const AGIRLIK=id=>id==='gun'?W_GUN:W;
 /* Eşikler gerçekçi varyasyon altında ayarlandı; taramada mesafe eşiği neredeyse
    etkisiz çıktı, ayrımı oran yapıyor. */
 const RED_MESAFE=1.8, RED_ORAN=1.30;
-const KILIT_MS=150;   /* poz bu kadar sabit tutulmadan onaylanmaz */
+/* OY PENCERESİ — eski yöntem "aynı etiketi kesintisiz KILIT_MS boyunca gör"
+   şartıydı; el hareket edince araya giren tek bir bozuk kare sayacı sıfırlıyor,
+   poz hiç onaylanmıyordu. Artık son OY_MS içindeki kareler oylanıyor: dağınık
+   kayıplar sonucu değiştirmiyor, yalnız çoğunluk gerekiyor. */
+const OY_MS=260, OY_PAY=0.55, OY_ASGARI=5;
+const KILIT_MS=150;   /* göstergelerde ilerleme çubuğu için korunuyor */
 const DIZI_MS=900;    /* mühürler arası zaman aşımı */
 const CEZA_MS=400;    /* eşleşmeyen dizi cezası */
 const KAL_ANAHTAR='muhurProto';
@@ -153,7 +158,29 @@ function carpismaCoz(a,b){
    ============================================================= */
 function yeniDizi(){
   return {aday:null,kilitMs:0,onayli:null,dizi:[],sonMuhur:0,
-    beceri:null,yukMs:0,yukTotal:0,cezaUntil:0,son:null};
+    beceri:null,yukMs:0,yukTotal:0,cezaUntil:0,son:null,oylar:[]};
+}
+/* Son OY_MS içindeki kareleri oyla. Onay için üç şart birden:
+   pencerenin çoğunluğu (OY_PAY), yeterli örnek (OY_ASGARI) ve kazananın
+   pencerede en az KILIT_MS önce başlamış olması. Süre şartı olmazsa kazara
+   bir anlık poz da tetikler; çoğunluk şartı olmazsa hareket hâlindeki
+   dağınık kayıplar pozu hiç onaylatmaz. İkisi birlikte gerekiyor. */
+function oyla(D,id,now){
+  D.oylar.push({id,t:now});
+  while(D.oylar.length&&now-D.oylar[0].t>OY_MS) D.oylar.shift();
+  const say={},ilk={},sonT={}; let en=null,enN=0;
+  for(const o of D.oylar){ if(!o.id) continue;
+    say[o.id]=(say[o.id]||0)+1;
+    if(ilk[o.id]===undefined) ilk[o.id]=o.t;
+    sonT[o.id]=o.t;
+    if(say[o.id]>enN){enN=say[o.id];en=o.id;} }
+  /* süre İLK ve SON oy arası — "şimdiye kadar" dersek poz bittikten sonra da
+     eski oylar pencerede kaldığı sürece büyümeye devam eder ve kısa bir
+     dokunuş gecikmeli olarak onaylanır. */
+  const oran=D.oylar.length?enN/D.oylar.length:0;
+  const sure=en?sonT[en]-ilk[en]:0;
+  const tamam=en&&oran>=OY_PAY&&enN>=OY_ASGARI&&sure>=KILIT_MS;
+  return {kazanan:tamam?en:null, aday:en, oran, sure};
 }
 function diziSifirla(D){ D.dizi=[];D.sonMuhur=0; }
 
@@ -161,13 +188,10 @@ function guncelle(D,id,dt,now){
   const olaylar=[];
   if(now<D.cezaUntil){ D.aday=null;D.kilitMs=0;return olaylar; }
 
-  /* zaman kilidi — asimetrik: tutarken tek kare kaybı düşürmez */
-  if(id&&id===D.aday) D.kilitMs=Math.min(KILIT_MS+120,D.kilitMs+dt);
-  else if(id){ D.aday=id;D.kilitMs=dt; }
-  else D.kilitMs=Math.max(0,D.kilitMs-dt*1.6);
-  if(!D.kilitMs) D.aday=null;
-
-  const onayli=(D.aday&&D.kilitMs>=KILIT_MS)?D.aday:null;
+  const oy=oyla(D,id,now);
+  D.aday=oy.aday||id||null;
+  D.kilitMs=Math.min(KILIT_MS,oy.sure*(oy.oran>=OY_PAY?1:0.4));   /* gösterge çubuğu */
+  const onayli=oy.kazanan;
   /* Beceri yüklenirken dizi KİLİTLİ: el doğal olarak silah pozundan çıkarken
      araya giren bir mühür yüklemeyi iptal ediyordu. Yükleme bir kez başladıysa
      bitecek — açıkta geçen o süre zaten riskin kendisi. */
