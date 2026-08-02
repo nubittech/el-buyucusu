@@ -148,11 +148,19 @@ const SEN=[
   ['şarjlıyken farklı element şarjı değiştirir',
     [F('fire',300),F(null,600),F('earth',300),F(null,600)],
     r=>r.D.beceri&&r.D.beceri.el==='earth'],
-  /* şarj 350 ms; mühür ~167 ms'de onaylanıyor, silah da ~167 ms sonra →
-     şarj 167 ms'de kalır, dolmadığı için ateşlememeli */
-  ['şarj dolmadan 👉 ateşlemez',
-    [F('earth',180),F('gun',260),F(null,60)],
-    r=>!r.olaylar.some(o=>o.tip==='ates')],   /* şarj sonradan dolabilir, önemli olan ateşlememesi */
+  /* Silah TUTULAN tetik: şarj dolmadan silaha geçersen bekler, dolunca ateşler.
+     Kritik olan atışın şarjdan ÖNCE olmaması. */
+  ['erken 👉 tutulur, şarj dolunca ateşler',
+    [F('earth',180),F('gun',700)],
+    r=>{const i=r.olaylar.findIndex(o=>o.tip==='yuklendi'),
+             j=r.olaylar.findIndex(o=>o.tip==='ates');
+        return i>=0&&j>i;}],
+  ['şarj dolu ama 👉 yapılmazsa ateşlemez',
+    [F('earth',180),F(null,800)],
+    r=>r.olaylar.some(o=>o.tip==='yuklendi')&&!r.olaylar.some(o=>o.tip==='ates')],
+  ['şarj bekler, sonradan 👉 yapılınca ateşler',
+    [F('earth',180),F(null,900),F('gun',300)],
+    r=>r.olaylar.some(o=>o.tip==='ates')],
   ['🔥 kısa dokunuş (100ms) tetiklemez', [F('fire',100),F(null,400)],
     r=>tip(r)==='—'],
   ['iki kez ateşlemek için iki mühür gerekir',

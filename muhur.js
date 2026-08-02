@@ -185,7 +185,11 @@ const GUCLU={fire:'Ejder Nefesi',air:'Kasırga',water:'Sel Dalgası',bolt:'Gök 
 const BESLI={fire:'Alev Fırtınası',air:'Fırtına Sarmalı',bolt:'Şarapnel Yıldırımı',earth:'Taş Seli',water:'Kaynar Dalga'};
 const FUZYON={fire:'Buhar Perdesi',air:'Kor Girdabı',bolt:'İyon Alanı',earth:'Sarsıntı',water:'Bataklık'};
 const ZINCIR={fire:'Yanan Gökyüzü',air:'Fırtına Kıyameti',bolt:'Yeraltı Sarsıntısı',earth:'Volkan',water:'Buhar Kasırgası'};
-const YUKLEME=[0,350,700,1200];
+/* Kademe 1 şarjı 350→250: ölçümde 350 ms tek başına darboğazdı (atış 500 ms),
+   250 ms'de tanıma onaylarıyla dengeleniyor (417-467 ms). Daha aşağısı bir şey
+   kazandırmıyor, orada gecikmeyi mühür ve silah onayları belirliyor.
+   Uzun kademeler kombo geri açıldığında risk penceresi olarak anlamlı, dokunulmadı. */
+const YUKLEME=[0,250,700,1200];
 const KAT={Temel:1.0,'Güçlendirilmiş':1.6,'Beslenmiş':1.6,'Füzyon':1.5,'Zincirleme üstünlük':2.6};
 
 function beceriBul(dz){
@@ -269,25 +273,26 @@ function guncelle(D,id,dt,now){
 
   /* --- TEK MÜHÜR MODU --- */
   if(!KOMBO){
-    if(onayli&&onayli!==D.onayli){
-      if(onayli==='gun'){
-        if(D.beceri&&D.yukMs>=D.yukTotal){
-          olaylar.push({tip:'ates',beceri:D.beceri});
-          D.beceri=null;D.yukMs=0;D.yukTotal=0;D.dizi=[];D.son=null;   /* şarj sıfırlanır */
-        }
-      } else if(!yukleniyor){
-        /* aynı elementi tekrar göstermek şarjı baştan başlatmasın */
-        if(!D.beceri||D.beceri.el!==onayli){
-          const b=beceriBul([onayli]);
-          D.beceri=b;D.yukTotal=b.ms;D.yukMs=0;D.dizi=[onayli];D.son=null;
-          olaylar.push({tip:'yuklemeBasladi',beceri:b});
-        }
+    /* element mührü → şarj */
+    if(onayli&&onayli!=='gun'&&onayli!==D.onayli&&!yukleniyor){
+      if(!D.beceri||D.beceri.el!==onayli){   /* aynı elementi tekrar göstermek şarjı bozmasın */
+        const b=beceriBul([onayli]);
+        D.beceri=b;D.yukTotal=b.ms;D.yukMs=0;D.dizi=[onayli];D.son=null;
+        olaylar.push({tip:'yuklemeBasladi',beceri:b});
       }
     }
     D.onayli=onayli;
     if(D.beceri&&D.yukMs<D.yukTotal){
       D.yukMs=Math.min(D.yukTotal,D.yukMs+dt);
       if(D.yukMs>=D.yukTotal) olaylar.push({tip:'yuklendi',beceri:D.beceri});
+    }
+    /* Silah TUTULUYORSA ateşler — "yeni onay" anına bağlamak ölü uca sokuyordu:
+       şarj dolmadan silaha geçersen o onay tüketiliyor, şarj sonradan dolunca
+       tetikleyecek yeni bir kenar kalmıyor ve eli bozup silahı tekrar yapman
+       gerekiyordu. Hızlı geçişte bu her seferinde oluyordu. */
+    if(D.beceri&&D.yukMs>=D.yukTotal&&onayli==='gun'){
+      olaylar.push({tip:'ates',beceri:D.beceri});
+      D.beceri=null;D.yukMs=0;D.yukTotal=0;D.dizi=[];D.son=null;   /* şarj sıfırlanır */
     }
     return olaylar;
   }
