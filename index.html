@@ -41,6 +41,7 @@ canvas{touch-action:none}
 .bigbtn{margin-top:6px;background:linear-gradient(180deg,#ff9e3d,#e8552e);color:#fff;border:none;border-radius:16px;
  padding:16px 46px;font-size:18px;font-weight:800;letter-spacing:.5px;box-shadow:0 6px 24px rgba(255,110,40,.45)}
 .bigbtn:active{transform:scale(.96)}
+.devlink{margin-top:2px;font-size:12px;color:#8d7bd8;text-decoration:none;border-bottom:1px dashed rgba(141,123,216,.5);padding-bottom:1px}
 #gameOver{display:none}
 #gameOver .final{font-size:44px;color:#ffd166;font-weight:800}
 </style>
@@ -68,6 +69,7 @@ canvas{touch-action:none}
   </div>
   <button class="bigbtn" id="startBtn">Başlat</button>
   <div class="note">Başlamak için ekranda herhangi bir yere dokunabilirsin. Kamera izni istenecek; görüntün cihazından çıkmaz, ekranda da gösterilmez. Kamera açılamazsa simülasyon moduna geçilir.</div>
+  <a class="devlink" id="lnkMuhur" href="muhur.html">🖐 Mühür tanıma testi (Faz 1) →</a>
 </div>
 
 <div class="ov2" id="gameOver">
@@ -941,8 +943,14 @@ sbtn.addEventListener('click',startGame);
 sbtn.addEventListener('pointerup',e=>{e.stopPropagation();startGame();});
 sbtn.addEventListener('touchend',e=>{e.preventDefault();startGame();},{passive:false});
 const sov=document.getElementById('startOv');
+/* bağlantı, "ekranda herhangi bir yere dokun" davranışından muaf olmalı */
+const lnk=document.getElementById('lnkMuhur');
+['pointerdown','touchstart','pointerup','touchend','click'].forEach(ev=>
+  lnk.addEventListener(ev,e=>{e.stopPropagation();},{passive:true}));
 ['pointerdown','touchstart','click'].forEach(ev=>
-  sov.addEventListener(ev,e=>{e.preventDefault();startGame();},{passive:false}));
+  sov.addEventListener(ev,e=>{
+    if(e.target===lnk) return;              /* bağlantıya dokunmak oyunu başlatmasın */
+    e.preventDefault();startGame();},{passive:false}));
 
 resize();
 let lastT=performance.now(),RDT=0.016;
