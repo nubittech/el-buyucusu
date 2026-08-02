@@ -90,7 +90,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v7.3 · doku + kamera · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v7.4 · kamera · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -188,7 +188,7 @@ const statusEl=document.getElementById('status'), scoreEl=document.getElementByI
 const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById('hpLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v7.3 · doku + kamera · motor hazır ✓';
+document.getElementById('subLine').textContent='v7.4 · kamera · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -731,6 +731,11 @@ function postKur(en,boy){
 function tamEkranCiz(){
   GL.bindBuffer(GL.ARRAY_BUFFER,QUAD);
   const loc=GL.getAttribLocation(GL.getParameter(GL.CURRENT_PROGRAM),'aQ');
+  /* Tam ekran programında yalnız aQ var. Sahne programından kalan aP/aN
+     dizileri açık kalırsa bu program için karşılığı olmayan diziler işaret
+     ediyor olur; sürücü her karede INVALID_OPERATION (1282) veriyordu.
+     Masaüstünde göz ardı ediliyor ama mobil sürücülerde çizimi düşürebilir. */
+  for(let i=0;i<3;i++) if(i!==loc) GL.disableVertexAttribArray(i);
   GL.enableVertexAttribArray(loc);
   GL.vertexAttribPointer(loc,2,GL.FLOAT,false,0,0);
   GL.drawArrays(GL.TRIANGLES,0,3);
@@ -1576,10 +1581,30 @@ function updatePlayer(dt){
    ============================================================= */
 /* KAM_BAK'ı yükseltmek kameranın eğimini azaltır (aşağı daha az bakar) ve
    gökyüzünü kareye geri getirir; karakterin boyutunu ve yatay yerini
-   değiştirmez — o ikisi KAM_UZAK ve KAM_YAN'a bağlı. Ayarlamak isteyeceğin
+   değiştirmez — o ikisi KAM_UZAK ve KAM_SOL'a bağlı. Ayarlamak isteyeceğin
    üç sayı bunlar. */
 const KAM_UZAK=7.5, KAM_YUK=3.4, KAM_BAK=2.05;
-const KAM_YAN=2.35;   /* nişanın sağa kayması — karakteri sola yaslayan şey bu */
+/* Karakterin merkezden SOLA kayması, EKRAN GENİŞLİĞİNİN ORANI olarak.
+   Önce sabit bir dünya kayması (2.35 birim) kullanılmıştı; o yalnız 16:9'da
+   doğruydu. Ekranın yarı genişliği en/boy ile ölçekleniyor, dolayısıyla
+   dikey telefonda (9:19.5) yarı genişlik 2.10 birime düşüyor ve 2.35'lik
+   kayma karakteri ekranın DIŞINA atıyordu (%−5.9). Oran olarak yazınca
+   çerçeveleme her ekranda aynı. */
+/* 0.15 (soldan %35) değişimi fark ettirmeyecek kadar inceydi — referansta
+   karakter sol üçtebirde duruyor. 0.20 → soldan %30. Tek ayar noktası bu:
+   0.24 ≈ %26, 0.28 ≈ %22 (referansa en yakın), 0.10 ≈ %40. */
+const KAM_SOL=0.20;
+function kamYan(){
+  const d=Math.hypot(KAM_UZAK,KAM_YUK-KAM_BAK);      /* kamera–karakter derinliği */
+  /* H, düzen oturmadan önce (ve yön değişiminin ortasında) 0 olabiliyor.
+     Bölünce en/boy sonsuz, kayma sonsuz, bakış vektörü NaN oluyor ve tüm
+     sahne kayboluyordu — ekran tek renk ufuk oluyor. Sabit kaymada bu yol
+     hiç çalışmadığı için ortaya ancak orana geçince çıktı. */
+  const asp=Math.min(Math.max((H>0?W/H:1.778),0.35),3.0);
+  const yariGen=d*Math.tan(FOV/2)*asp;
+  /* güvenlik: çok dar ekranda bile karakter kenardan içeride kalsın */
+  return Math.min(KAM_SOL*2*yariGen, yariGen*0.62);
+}
 function updateCamera(dt){
   const camTarget=LOCK?Math.atan2(LOCK.x-P.x,LOCK.z-P.z):P.yaw;
   camYaw=angLerp(camYaw,camTarget,1-Math.pow(0.03,dt));
@@ -1595,7 +1620,8 @@ function updateCamera(dt){
 function kameraBak(){
   const ileriX=Math.sin(camYaw), ileriZ=Math.cos(camYaw);
   const sagX=-ileriZ, sagZ=ileriX;              /* ileri × dünya_yukarı */
-  const hedefX=P.x+sagX*KAM_YAN, hedefZ=P.z+sagZ*KAM_YAN;
+  const yan=kamYan();
+  const hedefX=P.x+sagX*yan, hedefZ=P.z+sagZ*yan;
   let fx=hedefX-camX,fy=KAM_BAK-camY,fz=hedefZ-camZ;
   const fl=Math.hypot(fx,fy,fz)||1;camFx=fx/fl;camFy=fy/fl;camFz=fz/fl;
 }
