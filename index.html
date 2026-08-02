@@ -54,12 +54,6 @@ canvas{touch-action:none}
  z-index:6;background:var(--panel);color:var(--metin);border:1px solid var(--cizgi);backdrop-filter:blur(8px);
  -webkit-backdrop-filter:blur(8px);padding:8px 16px;border-radius:999px;font-size:13px;white-space:nowrap;
  pointer-events:none;transition:opacity .25s;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
-#simBar{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:50%;transform:translateX(-50%);
- z-index:7;display:none;gap:7px}
-#simBar button{background:linear-gradient(180deg,#5b2ee0,#3b1a99);color:#fff;border:1px solid rgba(255,255,255,.3);
- border-radius:13px;padding:11px 9px;font-size:19px;line-height:1;box-shadow:0 4px 18px rgba(80,40,220,.45)}
-#simBar button:active{transform:scale(.92)}
-#simBar button.gun{background:linear-gradient(180deg,#ff9e3d,#e8552e)}
 .ov2{position:absolute;inset:0;z-index:10;background:rgba(7,3,20,.93);display:flex;flex-direction:column;
  align-items:center;justify-content:center;text-align:center;padding:28px;gap:14px}
 .ov2 h1{font-size:30px;background:linear-gradient(90deg,#ffb347,#ff5e8a,#a06bff);
@@ -93,14 +87,10 @@ canvas{touch-action:none}
   <div id="lockPip"><i></i></div>
   <div id="skillNow"></div><div id="skillSub2"></div>
 </div>
-<div id="simBar">
-  <button data-p="fire">🔥</button><button data-p="air">🌪</button><button data-p="water">💧</button>
-  <button data-p="bolt">⚡</button><button data-p="earth">🪨</button><button data-p="gun" class="gun">👉</button>
-</div>
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v6.3 · gece + bloom · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v6.4 · gece + bloom · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -110,7 +100,7 @@ canvas{touch-action:none}
     🕹️ <b>Sağ başparmak:</b> sağ yarıda sürükle → manevra
   </div>
   <button class="bigbtn" id="startBtn">Başlat</button>
-  <div class="note">Başlamak için ekranda herhangi bir yere dokunabilirsin. Kamera izni istenecek; görüntün cihazından çıkmaz, ekranda da gösterilmez. Kamera açılamazsa simülasyon moduna geçilir.</div>
+  <div class="note">Başlamak için ekranda herhangi bir yere dokunabilirsin. Kamera izni istenecek; görüntün cihazından çıkmaz, ekranda da gösterilmez. Oyun tamamen el hareketleriyle oynanıyor; kamera izni olmadan başlayamaz.</div>
   <a class="devlink" id="lnkMuhur" href="muhur.html">🖐 Mühür tanıma testi (Faz 1) →</a>
 </div>
 
@@ -171,7 +161,7 @@ const statusEl=document.getElementById('status'), scoreEl=document.getElementByI
 const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById('hpLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v6.3 · gece + bloom · motor hazır ✓';
+document.getElementById('subLine').textContent='v6.4 · gece + bloom · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -685,7 +675,7 @@ function boom(x,y,z,scale,color){ fx.push({x,y,z,t:0,scale,color}); }
 const S={handSeen:false,lastHandTs:0,
   cursor:{x:innerWidth/2,y:innerHeight/2,ok:false},
   aim:{x:innerWidth/2,y:innerHeight/3,ok:false},
-  simPoz:null,camMode:false};
+  camMode:false};
 const D=MU.yeniDizi();            /* mühür dizisi durumu — muhur.js yönetiyor */
 let LOCK=null; /* kilitli düşman */
 function updateLock(){
@@ -719,7 +709,7 @@ function inputDown(x,y,id){ if(!G.running) return;
 const HAS_TOUCH='ontouchstart' in window;
 if(HAS_TOUCH){
   addEventListener('touchstart',e=>{
-    if(e.target.closest('#simBar')||e.target.closest('.ov2')||e.target.closest('button')) return;
+    if(e.target.closest('.ov2')||e.target.closest('button')) return;
     for(const t of e.changedTouches) inputDown(t.clientX,t.clientY,t.identifier);
     e.preventDefault();
   },{passive:false});
@@ -730,42 +720,38 @@ if(HAS_TOUCH){
   const tEnd=e=>{ for(const t of e.changedTouches) joyEnd(t.identifier); };
   addEventListener('touchend',tEnd);addEventListener('touchcancel',tEnd);
 } else {
-  addEventListener('pointerdown',e=>{ if(e.target.closest('#simBar')) return;
-    inputDown(e.clientX,e.clientY,e.pointerId); });
+  addEventListener('pointerdown',e=>inputDown(e.clientX,e.clientY,e.pointerId));
   addEventListener('pointermove',e=>joyMove(e.clientX,e.clientY,e.pointerId));
   const pEnd=e=>joyEnd(e.pointerId);
   addEventListener('pointerup',pEnd);addEventListener('pointercancel',pEnd);
 }
 
-/* Simülasyon butonları: kamera yokken mührü basılı tutarak ver.
-   Gerçek eldeki gibi zaman kilidinden geçer, yani basılı tutmak gerekir. */
-for(const b of document.querySelectorAll('#simBar button')){
-  const poz=b.dataset.p;
-  const bas=e=>{e.stopPropagation();S.simPoz=poz;};
-  b.addEventListener('pointerdown',bas);
-  b.addEventListener('touchstart',bas,{passive:true});
-}
-addEventListener('pointerup',()=>{S.simPoz=null;});
-addEventListener('touchend',()=>{S.simPoz=null;});
-addEventListener('pointercancel',()=>{S.simPoz=null;});
 
 /* =============================================================
    MediaPipe el takibi (kamera görüntüsü GÖSTERİLMEZ)
    ============================================================= */
 let landmarker=null;
-async function initCamera(){
+const zamanAsimi=(p,ms,ad)=>Promise.race([p,
+  new Promise((_,rej)=>setTimeout(()=>rej(new Error(ad+' '+ms+' ms içinde yanıt vermedi')),ms))]);
+async function initCamera(bildir){
+  bildir('📷 Kamera izni isteniyor…');
   const stream=await navigator.mediaDevices.getUserMedia({
     video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
-  video.srcObject=stream;await video.play();
+  video.srcObject=stream;
+  await zamanAsimi(video.play(),8000,'video.play()');
   /* MediaPipe YEREL — çevrimdışı çalışsın ve ilk açılış hızlı olsun diye.
      wasm klasöründe SIMD ve SIMD'siz iki sürüm var; FilesetResolver cihaza
      göre seçiyor, böylece eski iOS sürümleri de destekleniyor. */
-  const {FilesetResolver,HandLandmarker}=await import('./mediapipe/vision_bundle.mjs');
-  const vision=await FilesetResolver.forVisionTasks('mediapipe/wasm');
+  bildir('⚙️ Motor yükleniyor…');
+  const {FilesetResolver,HandLandmarker}=
+    await zamanAsimi(import('./mediapipe/vision_bundle.mjs'),25000,'motor dosyası');
+  const vision=await zamanAsimi(FilesetResolver.forVisionTasks('mediapipe/wasm'),25000,'wasm');
+  bildir('🧠 Model hazırlanıyor…');
   const opts=d=>({baseOptions:{modelAssetPath:'mediapipe/hand_landmarker.task',
     delegate:d},runningMode:'VIDEO',numHands:1});
-  try{ landmarker=await HandLandmarker.createFromOptions(vision,opts('GPU')); }
-  catch(e){ landmarker=await HandLandmarker.createFromOptions(vision,opts('CPU')); }
+  /* GPU delegesi bazen hata vermeden ASILI kalır — zaman aşımıyla CPU'ya düş */
+  try{ landmarker=await zamanAsimi(HandLandmarker.createFromOptions(vision,opts('GPU')),15000,'GPU delegesi'); }
+  catch(e){ landmarker=await zamanAsimi(HandLandmarker.createFromOptions(vision,opts('CPU')),30000,'CPU delegesi'); }
   S.camMode=true;pip.style.display='block';
 }
 function mapN(v){ return Math.min(1,Math.max(0,(v-0.15)/0.7)); }
@@ -775,7 +761,7 @@ let lastVideoTs=-1;
    Kalibrasyon da aynı localStorage anahtarından geliyor: test sayfasında
    kaydettiğin el, oyunda da geçerli. */
 function readHand(now){
-  let pozId=S.simPoz, lm=null, r=null;
+  let pozId=null, lm=null, r=null;
   if(S.camMode&&landmarker&&video.readyState>=2){
     try{
       if(video.currentTime!==lastVideoTs){
@@ -787,7 +773,7 @@ function readHand(now){
     if(lm){
       S.handSeen=true;S.lastHandTs=now;
       r=MU.siniflandir(MU.feat(lm));
-      pozId=r.id||S.simPoz;
+      pozId=r.id;
       const c=toScreen(lm[9]);S.cursor.x+=(c.x-S.cursor.x)*0.4;S.cursor.y+=(c.y-S.cursor.y)*0.4;S.cursor.ok=true;
       if(r.id==='gun'){const t=toScreen(lm[8]);S.aim.x+=(t.x-S.aim.x)*0.35;S.aim.y+=(t.y-S.aim.y)*0.35;S.aim.ok=true;}
     } else {
@@ -870,7 +856,7 @@ function cizMuhur(){
 function cancelSpell(){ MU.diziSifirla(D);D.beceri=null;D.yukMs=0;D.aday=null;D.kilitMs=0;D.onayli=null;D.oylar.length=0; }
 function setSpellStatus(){
   if(G.over) return;
-  if(!S.camMode){ setStatus('Mühür butonlarını basılı tut → 👉 ile kapat'); return; }
+  if(!S.camMode) return;   /* kamera yoksa hata mesajı zaten yazıyor, üstüne yazma */
   if(!S.handSeen){ setStatus('✋ Elini kameraya göster'); return; }
   if(D.beceri){
     setStatus(D.yukMs>=D.yukTotal ? '✓ '+D.beceri.ad+' hazır — 👉 ile ateşle'
@@ -1386,7 +1372,7 @@ function resetGame(){
   G.score=0;scoreEl.textContent='0';G.can=OY_CAN;canCiz();
   enemies.length=0;shots.length=0;fx.length=0;
   P.x=0;P.z=0;P.yaw=0;P.targetYaw=0;camYaw=0;camX=0;camY=4.6;camZ=-8;
-  cancelSpell();S.simPoz=null;
+  cancelSpell();
   G.over=false;G.running=true;G.spawnT=2.2;G.flash=0;
 }
 function retry(){ if(!G.over||performance.now()-overAt<600) return;
@@ -1401,16 +1387,15 @@ let started=false;
 async function startGame(){
   if(started) return;started=true;
   document.getElementById('startOv').style.display='none';
-  document.getElementById('simBar').style.display='flex';
   resetGame();
-  setStatus('📷 Kamera deneniyor…');
-  const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('camera-timeout')),6000));
-  try{
-    await Promise.race([initCamera(),timeout]);
-    document.getElementById('simBar').style.display='none';
-  }catch(e){
+  /* Eskiden initCamera 6 sn'lik bir Promise.race'e sokuluyordu. Yavaş telefonda
+     zaman aşımı kazanıyor, catch "kamera yok" diyor, ama initCamera arkada
+     çalışmaya devam edip kamerayı AÇIYORDU — durum tutarsız kalıyordu.
+     Yarış yok artık: her aşamanın kendi zaman aşımı var ve hata net. */
+  try{ await initCamera(setStatus); }
+  catch(e){
     S.camMode=false;
-    setStatus('📷 Kamera yok — simülasyon modu');
+    setStatus('📷 Kamera açılamadı: '+(e.message||e.name));
   }
 }
 const sbtn=document.getElementById('startBtn');
