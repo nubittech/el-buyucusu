@@ -83,7 +83,7 @@ canvas{touch-action:none}
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
-    👉 <b>Silah</b> (işaret+orta) diziyi kapatır → beceri yüklenir → ateşlenir<br>
+    ✋ <b>Tek mühür şarj eder</b> → 👉 <b>silah</b> (işaret+orta) ateşler → şarj biter<br>
     ⚔️ <b>Havada çarpışma:</b> döngüde üstün olan deler — 🔥→🌪→⚡→🪨→💧→🔥<br>
     🧱 <b>Siper:</b> delip geçen mermi seni kovalar, tek kaçış engellerin arkası<br>
     🕹️ <b>Sağ başparmak:</b> sağ yarıda sürükle → manevra
@@ -100,7 +100,7 @@ canvas{touch-action:none}
   <button class="bigbtn" id="retryBtn">Tekrar Dene</button>
 </div>
 
-<script src="muhur.js?v=10"></script>
+<script src="muhur.js?v=11"></script>
 <script>
 'use strict';
 /* =============================================================
@@ -515,13 +515,16 @@ function updateSpell(pozId,dtMs,now){
     if(o.tip==='muhur') vibrate(12);
     else if(o.tip==='yuklemeBasladi') vibrate(25);
     else if(o.tip==='basarisiz') vibrate(60);
-    else if(o.tip==='yuklendi'){ ates(o.beceri); vibrate(45); }
+    else if(o.tip==='yuklendi') vibrate(30);        /* şarj doldu, ateşe hazır */
+    else if(o.tip==='ates'){ ates(o.beceri); vibrate(50); }   /* 👉 tetikledi */
   }
   cizMuhur();
   setSpellStatus();
 }
 /* Yükleme bitince beceri kendiliğinden çıkar: yükleme süresi boyunca açıkta
    kalmak zaten riskin kendisi, üstüne bir de tetik beklemek tempoyu boğuyor. */
+/* Kombo kapalı: tek mühür şarj eder, 👉 ateşler, ateşleyince şarj sıfırlanır.
+   Dizi motoru şarjı zaten temizliyor, burada yalnız mermi çıkıyor. */
 function ates(beceri){
   const sx=P.x,sy=1.35,sz=P.z;
   let dx,dy,dz;
@@ -529,7 +532,6 @@ function ates(beceri){
   else { dx=Math.sin(P.yaw);dy=-0.05;dz=Math.cos(P.yaw); }
   const dl=Math.hypot(dx,dy,dz)||1;
   fire(sx,sy,sz,dx/dl,dy/dl,dz/dl,beceri.el,beceri.kat,'oyuncu',LOCK);
-  D.beceri=null;D.yukMs=0;D.son=null;
 }
 function cizMuhur(){
   /* şu an okunan poz en solda, sönük: elin ne verdiğini anlık görebilesin */
@@ -545,7 +547,8 @@ function cizMuhur(){
     const o=D.yukTotal?D.yukMs/D.yukTotal:1;
     skillNowEl.textContent=MU.BY[D.beceri.el].el+' '+D.beceri.ad;
     skillNowEl.style.color='#'+MU.ELEM[D.beceri.el].renk.toString(16).padStart(6,'0');
-    skillSubEl.textContent=D.beceri.tur+' ×'+D.beceri.kat+' · yükleniyor %'+Math.round(o*100);
+    skillSubEl.textContent = o>=1 ? '👉 ile ateşle'
+      : D.beceri.tur+' ×'+D.beceri.kat+' · şarj %'+Math.round(o*100);
   } else if(performance.now()<D.cezaUntil){
     skillNowEl.textContent='✗ eşleşme yok';skillNowEl.style.color='#ff7a7a';
     skillSubEl.textContent=D.son||'';
@@ -556,8 +559,10 @@ function setSpellStatus(){
   if(G.over) return;
   if(!S.camMode){ setStatus('Mühür butonlarını basılı tut → 👉 ile kapat'); return; }
   if(!S.handSeen){ setStatus('✋ Elini kameraya göster'); return; }
-  if(D.beceri){ setStatus('⏳ '+D.beceri.ad+' yükleniyor'); return; }
-  if(D.dizi.length){ setStatus('👉 silah pozu ile kapat'); return; }
+  if(D.beceri){
+    setStatus(D.yukMs>=D.yukTotal ? '✓ '+D.beceri.ad+' hazır — 👉 ile ateşle'
+                                  : '⏳ '+D.beceri.ad+' şarj oluyor');
+    return; }
   setStatus('🔥 🌪 💧 ⚡ 🪨 — bir mühür yap');
 }
 

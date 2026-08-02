@@ -124,7 +124,7 @@ for(const el of EL) for(const [g1,g2] of [[1,1.6],[1.6,1],[1,2.6],[2.6,1.6]]){
 console.log(` ${sapma?'✗ HATA':'✓'}  aynı element çarpışmasında hep güçlü mühür deliyor (${sapma} sapma)`);
 if(sapma)fail++;
 
-console.log('\n5) DİZİ MOTORU (60 fps kare simülasyonu)\n');
+console.log('\n5) TEK MÜHÜR MODU (kombo kapalı, 60 fps kare simülasyonu)\n');
 const DT=1000/60;
 function oyna(adimlar){
   const D=M.yeniDizi(); let t=0; const olaylar=[];
@@ -132,42 +132,37 @@ function oyna(adimlar){
   return {D,olaylar};
 }
 const F=(id,ms)=>[id,Math.round(ms/DT)];
+const tip=r=>r.olaylar.map(o=>o.tip).join(',')||'—';
 const SEN=[
-  ['🔥 tut → 👉 → yüklen', [F('fire',300),F(null,60),F('gun',300),F(null,600)],
-    r=>r.olaylar.some(o=>o.tip==='yuklendi'&&o.beceri.ad==='Alev Oku')],
+  ['🔥 → şarj olur (ateş etmez)', [F('fire',300),F(null,600)],
+    r=>tip(r)==='yuklemeBasladi,yuklendi' && r.D.beceri && r.D.beceri.ad==='Alev Oku'],
+  ['🔥 → 👉 → ateşler', [F('fire',300),F(null,150),F('gun',300),F(null,200)],
+    r=>r.olaylar.some(o=>o.tip==='ates'&&o.beceri.ad==='Alev Oku')],
+  ['ateşten sonra şarj sıfırlanır', [F('fire',300),F(null,150),F('gun',300),F(null,200)],
+    r=>r.D.beceri===null],
+  ['şarjsız 👉 hiçbir şey yapmaz', [F('gun',400),F(null,200)],
+    r=>!r.olaylar.some(o=>o.tip==='ates')],
+  ['🔥 sonra tekrar 🔥 şarjı baştan başlatmaz',
+    [F('fire',300),F(null,150),F('fire',300),F(null,150)],
+    r=>r.olaylar.filter(o=>o.tip==='yuklemeBasladi').length===1],
+  ['şarjlıyken farklı element şarjı değiştirir',
+    [F('fire',300),F(null,600),F('earth',300),F(null,600)],
+    r=>r.D.beceri&&r.D.beceri.el==='earth'],
+  /* şarj 350 ms; mühür ~167 ms'de onaylanıyor, silah da ~167 ms sonra →
+     şarj 167 ms'de kalır, dolmadığı için ateşlememeli */
+  ['şarj dolmadan 👉 ateşlemez',
+    [F('earth',180),F('gun',260),F(null,60)],
+    r=>!r.olaylar.some(o=>o.tip==='ates')],   /* şarj sonradan dolabilir, önemli olan ateşlememesi */
   ['🔥 kısa dokunuş (100ms) tetiklemez', [F('fire',100),F(null,400)],
-    r=>!r.olaylar.some(o=>o.tip==='muhur')],
-  ['🪨💧🔥 👉 → Volkan', [F('earth',250),F(null,50),F('water',250),F(null,50),F('fire',250),F(null,50),F('gun',250),F(null,1400)],
-    r=>r.olaylar.some(o=>o.tip==='yuklendi'&&o.beceri.ad==='Volkan')],
-  ['🔥⚡ 👉 → eşleşme yok + ceza', [F('fire',250),F(null,50),F('bolt',250),F(null,50),F('gun',250),F(null,200)],
-    r=>r.olaylar.some(o=>o.tip==='basarisiz')],
-  ['🔥 sonra 1 sn bekle → dizi zaman aşımı', [F('fire',250),F(null,1100)],
-    r=>r.olaylar.some(o=>o.tip==='zamanAsimi')],
-  ['tutarken tek kare kaybı mührü bölmez', [F('fire',120),[null,1],F('fire',120),F(null,300)],
-    r=>r.olaylar.filter(o=>o.tip==='muhur').length===1],
-  /* ARDIŞIK AYNI MÜHÜR BASTIRILIR: el sabit dururken tanıma bir an kesilip
-     yeniden kilitlenince dizi 🔥🔥🔥 oluyordu ve hiçbir beceriye karşılık
-     gelmediği için 👉 ateş ettirmiyordu. */
-  ['🔥 → bırak → 🔥 tek mühür sayılır',
-    [F('fire',250),F(null,150),F('fire',250),F(null,150)],
-    r=>r.olaylar.filter(o=>o.tip==='muhur').length===1],
-  ['🔥🔥👉 artık Alev Oku verir (Ejder Nefesi ulaşılamaz)',
-    [F('fire',250),F(null,150),F('fire',250),F(null,150),F('gun',250),F(null,600)],
-    r=>r.olaylar.some(o=>o.tip==='yuklendi'&&o.beceri.ad==='Alev Oku')],
-  ['🔥🌪🔥 farklı mühürler ardışık sayılır',
-    [F('fire',250),F(null,120),F('air',250),F(null,120),F('fire',250),F(null,120)],
-    r=>r.olaylar.filter(o=>o.tip==='muhur').length===3],
-  ['4. FARKLI mühür reddedilir',
-    [F('fire',250),F(null,120),F('air',250),F(null,120),F('bolt',250),F(null,120),F('water',250),F(null,100)],
-    r=>r.olaylar.some(o=>o.tip==='basarisiz'&&/en fazla 3/.test(o.sebep))],
-  /* YÜKLEME KİLİDİ: yükleme başladıktan sonra araya giren mühür iptal etmemeli */
-  ['yükleme sırasındaki mühür yüklemeyi iptal etmez',
-    [F('fire',250),F(null,120),F('gun',250),F('water',300),F(null,400)],
-    r=>r.olaylar.some(o=>o.tip==='yuklendi'&&o.beceri.ad==='Alev Oku')],
+    r=>tip(r)==='—'],
+  ['iki kez ateşlemek için iki mühür gerekir',
+    [F('fire',300),F(null,150),F('gun',300),F(null,150),F('gun',300),F(null,150),
+     F('fire',300),F(null,150),F('gun',300),F(null,150)],
+    r=>r.olaylar.filter(o=>o.tip==='ates').length===2],
 ];
 for(const [ad,adim,kontrol] of SEN){
   const r=oyna(adim); const ok=kontrol(r); if(!ok)fail++;
-  console.log(` ${ok?'✓':'✗ HATA'}  ${pad(ad,40)} olaylar: ${r.olaylar.map(o=>o.tip).join(',')||'—'}`);
+  console.log(` ${ok?'✓':'✗ HATA'}  ${pad(ad,44)} olaylar: ${tip(r)}`);
 }
 
 console.log(fail ? `\n=== ${fail} BAŞARISIZ ===` : '\n=== HEPSİ GEÇTİ ===');

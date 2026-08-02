@@ -105,10 +105,11 @@ a{color:#8d7bd8}
   </div>
 
   <div class="card hint">
-    <b>Nasıl çalışıyor:</b> mühür ~150 ms sabit tutulunca onaylanır ve diziye yazılır.
-    İki mühür arası 900 ms'yi geçerse dizi sıfırlanır. 👉 silah pozu diziyi kapatır,
-    beceri tablosunda aranır; eşleşme varsa yüklenir, yoksa ~0.4 sn ceza uygulanır.
-    En yakın iki poz birbirine çok yakınsa <b>hiçbir şey tetiklenmez</b>.
+    <b>Nasıl çalışıyor:</b> son ~260 ms'lik pencerede çoğunluk oyu aranır; poz
+    ~150 ms boyunca baskın olmalı. Dağınık kare kayıpları sonucu değiştirmez.
+    <b>Kombo şimdilik kapalı:</b> tek mühür beceriyi şarj eder, 👉 silah pozu
+    ateşler, ateşleyince şarj sıfırlanır. Sistem <b>emin değilse hiçbir şey
+    tetiklenmez</b> — yanlış element atmaktansa hiç atmamak yeğdir.
     <div style="margin-top:8px"><kbd>D</kbd> hata ayıklama · <kbd>R</kbd> diziyi sıfırla</div>
     <div style="margin-top:8px"><a href="index.html">← oyuna dön</a></div>
     <div id="mherr" style="margin-top:8px"></div>
@@ -117,7 +118,7 @@ a{color:#8d7bd8}
 
 <video id="mhcam" playsinline muted autoplay style="position:fixed;width:2px;height:2px;opacity:0;pointer-events:none"></video>
 
-<script src="muhur.js?v=10"></script>
+<script src="muhur.js?v=11"></script>
 <script>
 'use strict';
 const M=window.MUHUR;

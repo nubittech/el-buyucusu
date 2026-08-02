@@ -52,6 +52,12 @@ const RED_MESAFE=1.8, RED_ORAN=1.30;
    poz hiç onaylanmıyordu. Artık son OY_MS içindeki kareler oylanıyor: dağınık
    kayıplar sonucu değiştirmiyor, yalnız çoğunluk gerekiyor. */
 const OY_MS=260, OY_PAY=0.55, OY_ASGARI=5;
+/* KOMBO KAPALI (şimdilik). Açıkken: mühürler diziye yazılır, 👉 diziyi kapatır,
+   beceri tablosunda aranır ve yüklenir. Kapalıyken: tek mühür beceriyi doğrudan
+   şarj eder, 👉 yalnız ateşler, ateşleyince şarj sıfırlanır. Kombo mantığı
+   silinmedi — beceriBul ve dizi motoru duruyor, yalnız bu bayrakla atlanıyor. */
+let KOMBO=false;
+const komboAyar=v=>{KOMBO=!!v;};
 const KILIT_MS=150;   /* göstergelerde ilerleme çubuğu için korunuyor */
 const DIZI_MS=900;    /* mühürler arası zaman aşımı */
 const CEZA_MS=400;    /* eşleşmeyen dizi cezası */
@@ -260,6 +266,32 @@ function guncelle(D,id,dt,now){
      araya giren bir mühür yüklemeyi iptal ediyordu. Yükleme bir kez başladıysa
      bitecek — açıkta geçen o süre zaten riskin kendisi. */
   const yukleniyor = D.beceri && D.yukMs < D.yukTotal;
+
+  /* --- TEK MÜHÜR MODU --- */
+  if(!KOMBO){
+    if(onayli&&onayli!==D.onayli){
+      if(onayli==='gun'){
+        if(D.beceri&&D.yukMs>=D.yukTotal){
+          olaylar.push({tip:'ates',beceri:D.beceri});
+          D.beceri=null;D.yukMs=0;D.yukTotal=0;D.dizi=[];D.son=null;   /* şarj sıfırlanır */
+        }
+      } else if(!yukleniyor){
+        /* aynı elementi tekrar göstermek şarjı baştan başlatmasın */
+        if(!D.beceri||D.beceri.el!==onayli){
+          const b=beceriBul([onayli]);
+          D.beceri=b;D.yukTotal=b.ms;D.yukMs=0;D.dizi=[onayli];D.son=null;
+          olaylar.push({tip:'yuklemeBasladi',beceri:b});
+        }
+      }
+    }
+    D.onayli=onayli;
+    if(D.beceri&&D.yukMs<D.yukTotal){
+      D.yukMs=Math.min(D.yukTotal,D.yukMs+dt);
+      if(D.yukMs>=D.yukTotal) olaylar.push({tip:'yuklendi',beceri:D.beceri});
+    }
+    return olaylar;
+  }
+
   if(onayli&&onayli!==D.onayli&&!yukleniyor){    /* yalnız YENİ onayda tetikle */
     if(onayli==='gun'){
       if(D.dizi.length){
@@ -311,6 +343,7 @@ global.MUHUR={
   kayitBasla,kayitOrnek,kayitBitir,kayitIptal,
   get KAL(){return KAL;},
   YENER,YENILIR,ELEM,beceriBul,AVANTAJ,NOTR_ESIK,carpismaCoz,
-  yeniDizi,guncelle,diziSifirla,
+  yeniDizi,guncelle,diziSifirla,komboAyar,
+  get KOMBO(){return KOMBO;},
 };
 })(typeof window!=='undefined'?window:globalThis);
