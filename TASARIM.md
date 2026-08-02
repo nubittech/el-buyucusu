@@ -2,8 +2,32 @@
 
 Tasarım dökümanı · v1 · 2 Ağustos 2026
 
-Bu döküman prototipin (v5.2) üstüne gelen çekirdek dövüş sisteminin tasarımıdır.
-Kod yazılmadan önce kararların netleşmesi için hazırlandı.
+Bu döküman prototipin üstüne gelen çekirdek dövüş sisteminin tasarımıdır.
+
+---
+
+## 0. Uygulama durumu — neresi CANLI, neresi tasarım
+
+Faz 1 ve 2 tamamlandı. Oynanan sürümle bu dökümanın bazı bölümleri bilinçli
+olarak ayrıştı; aşağıdaki tablo hangisinin geçerli olduğunu söyler.
+
+| Konu | Dökümanda | **Canlı sürümde** |
+|---|---|---|
+| Mühür dizisi / kombo (3.4) | mühürler dizilir, 👉 kapatır | **KAPALI** — tek mühür şarj eder, 👉 ateşler, ateşleyince şarj biter |
+| Beceri kademeleri (3.6) | 4 kademe, 20 beceri | yalnız **Kademe 1** (5 temel saldırı) erişilebilir |
+| Aynı anda düşman (6) | en fazla 3 | **1** — tek tek geliyorlar |
+| Ateşleme | dizi kapanınca otomatik | 👉 **tutulan tetik**: şarj dolu + silah pozu = atış |
+| Kademe 1 şarjı | 350 ms | **250 ms** (ölçümle: 350 tek başına darboğazdı) |
+| Tanıma | tek örnekli prototip | **öğrenilmiş kalibrasyon** — her poz kullanıcının elinden kaydediliyor, sigma cinsinden sınıflandırma |
+| Poz onayı | kesintisiz 150 ms | **260 ms'lik oy penceresinde çoğunluk** (hareket toleransı için) |
+
+Kombo mantığı **silinmedi**, `muhur.js` içinde `KOMBO=false` bayrağıyla kapalı.
+Beceri tablosu, dizi motoru ve çarpışma çözümü olduğu gibi duruyor; tanıma
+güvenilirliği yeterli görülünce tek satırla geri açılır. Bu yüzden 3.4 ve 3.6
+bölümleri silinmedi — geri dönülecek tasarım onlar.
+
+**Neden kapatıldı:** tanıma gerçek kamerada zorlanırken kombo her ek mühürle
+hata olasılığını çarpıyordu. Önce tek mühür güvenilir hale getirildi.
 
 ---
 
@@ -404,16 +428,20 @@ ya da WebSocket röle (kurulumu kolay, sunucu gerekir).
 
 ## 9. Uygulama fazları
 
-| Faz | İçerik | Çıktı |
+| Faz | İçerik | Durum |
 |---|---|---|
-| **1** | Mühür tanıma katmanı: 5 mühür + 👉 silah pozu, zaman kilidi, belirsizlik reddi, dizi motoru | Sentetik iskelet testleri + ekranda canlı mühür/dizi test alanı |
-| **2** | Element çekirdeği: mermi, güç, havada çarpışma, delme/nötrleme, siper | Tek düşmanla oynanabilir düello |
-| **3** | PvE: 1–3 düşman, davranış, can, ustalık ve ilerleme | Tam oynanabilir tek kişilik oyun |
-| **4** | PvP 1v1: taşıma katmanı + lockstep | İki kişilik düello |
+| **1** | Mühür tanıma katmanı: 5 mühür + 👉 silah pozu, oy penceresi, öğrenilmiş kalibrasyon | ✅ **bitti** — `muhur.html` |
+| **2** | Element çekirdeği: mermi, güç, havada çarpışma, delme/nötrleme, siper, can | ✅ **bitti** — `index.html` |
+| **3** | PvE: düşman çeşitliliği, davranış, ustalık ve ilerleme | sırada |
+| **4** | Kombo geri açılır (tanıma güvenilir olduğunda) | bekliyor |
+| **5** | PvP 1v1: taşıma katmanı + lockstep | bekliyor |
 
-Faz 1 kritik: her şey mühür tanımanın güvenilirliğine bağlı ve geçen sefer kırılan
-yer tam olarak burasıydı. Sentetik iskeletlerle kalibrasyon + gerçek kamerayla senin
-onayın alınmadan Faz 2'ye geçilmeyecek.
+Faz 1'de öğrenilen ders dökümana yazılmaya değer: **sentetik test düzeneği bir
+noktadan sonra gerçeği tahmin etmeyi bıraktı** — %99 doğruluk raporlarken
+gerçek oyunda "çoğunu okumuyor" durumu vardı. Modellenmeyenler: hareket
+bulanıklığı, MediaPipe'ın takip önceli, gerçek el anatomisi, kamera farkları.
+Çözüm eşik ayarlamak değil, **kullanıcının kendi elinden öğrenmek** oldu.
+`tools/` altındaki ölçüm betikleri, yanlış çıkan hipotezler dahil duruyor.
 
 ---
 
