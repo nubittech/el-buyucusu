@@ -6,35 +6,44 @@
 <title>Gölge Ninja — Prototip</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;width:100%;overflow:hidden;position:fixed;inset:0;background:#0b0620;
+html,body{height:100%;width:100%;overflow:hidden;position:fixed;inset:0;background:#dbe4f0;
  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#efeaff;
  touch-action:none;user-select:none;-webkit-user-select:none}
 canvas{touch-action:none}
 #gl,#ov{position:absolute;inset:0;width:100%;height:100%;display:block}
 #ov{pointer-events:none}
+#kagit{position:absolute;inset:0;z-index:4;pointer-events:none;
+ background:
+  radial-gradient(120% 80% at 78% 8%, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 55%),
+  linear-gradient(180deg, rgba(200,216,238,.42) 0%, rgba(255,255,255,0) 42%, rgba(246,238,228,.30) 100%),
+  url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/><feColorMatrix type='saturate' values='0'/></filter><rect width='180' height='180' filter='url(%23n)' opacity='0.5'/></svg>");
+ background-size:auto,auto,180px 180px;
+ mix-blend-mode:soft-light;opacity:.75}
 #cam{position:absolute;width:2px;height:2px;opacity:0;pointer-events:none}
 #pip{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;width:92px;height:122px;
- border-radius:12px;border:1px solid rgba(255,255,255,.28);background:#0a0622;z-index:5;display:none}
-#hud{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:14px;z-index:5;text-align:right;
- font-weight:700;text-shadow:0 2px 10px #000;pointer-events:none}
-#hud .score{font-size:24px;color:#ffd166;letter-spacing:1px}
-#hud .cw{width:104px;height:8px;background:rgba(255,255,255,.14);border-radius:99px;margin:6px 0 0 auto;overflow:hidden}
+ border-radius:12px;border:1px solid rgba(70,90,120,.3);background:#0a0622;z-index:6;display:none}
+#hud{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:14px;z-index:6;text-align:right;
+ font-weight:800;text-shadow:0 1px 2px rgba(255,255,255,.9),0 0 6px rgba(255,255,255,.7);
+ pointer-events:none;color:#2b3a52}
+#hud .score{font-size:24px;color:#c25f18;letter-spacing:1px;text-shadow:0 1px 2px rgba(255,255,255,.95)}
+#hud .cw{width:104px;height:8px;background:rgba(70,90,120,.22);border-radius:99px;margin:6px 0 0 auto;overflow:hidden}
 #hud .cw i{display:block;height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#ff5e6a,#ff9e3d);transition:width .18s}
-#hud .cl{font-size:10px;color:#b9aee0;letter-spacing:1px;margin-top:3px}
+#hud .cl{font-size:10px;color:#3f5074;letter-spacing:1px;margin-top:3px;font-weight:800}
 /* mühür dizisi + yüklenen beceri: sol altta, elin gördüğünü oyuncuya geri söyler */
 #spell{position:absolute;left:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);z-index:6;pointer-events:none}
 #seqStrip{display:flex;gap:6px;align-items:center;min-height:44px}
 #seqStrip .c{font-size:24px;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;
- background:rgba(12,6,34,.72);border:1px solid rgba(255,255,255,.2)}
+ background:rgba(255,255,255,.78);border:1px solid rgba(70,90,120,.24)}
 #seqStrip .c.g{opacity:.35}
 #seqStrip .c.now{background:none;border-style:dashed;opacity:.75;margin-right:4px}
-#lockPip{width:104px;height:5px;background:rgba(255,255,255,.16);border-radius:99px;overflow:hidden;margin-top:2px}
+#lockPip{width:104px;height:5px;background:rgba(70,90,120,.22);border-radius:99px;overflow:hidden;margin-top:2px}
 #lockPip i{display:block;height:100%;width:0;border-radius:99px;background:#37d6ff}
 #lockPip.rdy i{background:#ffb347}
-#skillNow{font-size:15px;font-weight:800;text-shadow:0 2px 10px #000;margin-top:6px;min-height:20px}
-#skillSub2{font-size:11px;color:#b9aee0;text-shadow:0 2px 8px #000;min-height:14px}
+#skillNow{font-size:15px;font-weight:800;text-shadow:0 1px 2px rgba(255,255,255,.95),0 0 6px rgba(255,255,255,.8);
+ margin-top:6px;min-height:20px}
+#skillSub2{font-size:11px;color:#3f5074;font-weight:700;text-shadow:0 1px 2px rgba(255,255,255,.95);min-height:14px}
 #status{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 142px);
- z-index:5;background:rgba(12,6,34,.66);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(8px);
+ z-index:6;background:rgba(255,255,255,.72);color:#3b4a63;border:1px solid rgba(70,90,120,.22);backdrop-filter:blur(8px);
  -webkit-backdrop-filter:blur(8px);padding:8px 16px;border-radius:999px;font-size:13px;white-space:nowrap;
  pointer-events:none;transition:opacity .25s;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
 #simBar{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:50%;transform:translateX(-50%);
@@ -62,6 +71,10 @@ canvas{touch-action:none}
 <body>
 <canvas id="gl"></canvas>
 <canvas id="ov"></canvas>
+<!-- Guaj hissinin doku kısmı. WebGL tarafında doku desteği yok (UV yok), ama
+     ekranın üstüne binen ince bir tane dokusu + gökyüzü gradyanı aynı işi
+     kare başına sıfır maliyetle görüyor. -->
+<div id="kagit"></div>
 <video id="cam" playsinline muted autoplay></video>
 <canvas id="pip"></canvas>
 <div id="hud"><div class="score" id="score">0</div>
@@ -154,6 +167,36 @@ function mRy(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,-
 function mRz(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1]);}
 function M(){let o=arguments[0];for(let i=1;i<arguments.length;i++)o=mMul(o,arguments[i]);return o;}
 
+/* =============================================================
+   FIRÇA DOKUSU — prosedürel, hazır görsel yok.
+   Gri tonlu, uzun ve yumuşak darbeler; her darbe kenarlardan taşarken
+   karşı taraftan da çizilerek doku KUSURSUZ DÖŞENİR (512 = ikinin kuvveti,
+   WebGL1'de REPEAT sarma için şart).
+   ============================================================= */
+function fircaDokusuUret(boy){
+  const c=document.createElement('canvas');c.width=c.height=boy;
+  const x=c.getContext('2d');
+  x.fillStyle='#808080';x.fillRect(0,0,boy,boy);         /* nötr gri = etkisiz */
+  let r=987654321; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
+  x.lineCap='round';
+  for(let i=0;i<1400;i++){
+    const uz=boy*(0.05+rnd()*0.22), aci=rnd()*Math.PI, kal=1.5+rnd()*7;
+    const ton=rnd()<0.5?255:0, alfa=0.028+rnd()*0.055;
+    const px=rnd()*boy, py=rnd()*boy;
+    const dx=Math.cos(aci)*uz/2, dy=Math.sin(aci)*uz/2;
+    x.strokeStyle=`rgba(${ton},${ton},${ton},${alfa})`;
+    x.lineWidth=kal;
+    /* 3×3 kaydırma: kenardan taşan darbe karşı kenardan girsin → döşenebilir */
+    for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++){
+      x.beginPath();
+      x.moveTo(px-dx+ox*boy,py-dy+oy*boy);
+      x.lineTo(px+dx+ox*boy,py+dy+oy*boy);
+      x.stroke();
+    }
+  }
+  return c;
+}
+
 /* --- shader --- */
 function sh(type,src){const s=GL.createShader(type);GL.shaderSource(s,src);GL.compileShader(s);
   if(!GL.getShaderParameter(s,GL.COMPILE_STATUS)) throw new Error(GL.getShaderInfoLog(s));return s;}
@@ -168,11 +211,47 @@ precision mediump float;
 varying vec3 vN; varying vec3 vW;
 uniform vec3 uColor; uniform float uEmiss; uniform float uAlpha;
 uniform vec3 uCam; uniform vec3 uFogCol; uniform vec2 uFogR; uniform vec3 uLight;
+uniform vec3 uWarm; uniform vec3 uCool;
+uniform sampler2D uFirca; uniform vec2 uFircaOlcek;   /* .x ince, .y kaba katman */
+/* GUAJ GÖRÜNÜMÜ — doku yok, üç şeyle yapılıyor:
+   1) BANTLAMA: sürekli gradyan yerine üç ton kademesi. Suluboya/guaj resimlerde
+      ton grupları düz durur, aradaki geçiş dardır.
+   2) SICAK–SOĞUK: gölgeyi karartmak yerine soğuğa (mavi-mor), ışığı sıcağa
+      kaydırmak. Bu, o üsluptaki derinlik hissinin asıl kaynağı.
+   3) ATMOSFER: uzaklık arttıkça her şey gökyüzü rengine soluyor. Referans
+      görselde arkadaki ağaçların neredeyse beyaza dönmesi tam olarak bu. */
+/* Üçdüzlemli örnekleme: UV yok, dünya konumundan üç eksen düzleminde örnekleyip
+   normale göre harmanlıyoruz. Geometriye hiç dokunmadan doku uygulanır ve
+   primitiflerde UV dikişi oluşmaz. */
+float firca(vec3 w,vec3 n,float olcek){
+  vec3 an=abs(n); an/=(an.x+an.y+an.z+1e-5);
+  return texture2D(uFirca,w.zy*olcek).r*an.x
+       + texture2D(uFirca,w.xz*olcek).r*an.y
+       + texture2D(uFirca,w.xy*olcek).r*an.z;
+}
 void main(){
   vec3 n=normalize(vN);
   float dif=max(dot(n,uLight),0.0);
-  vec3 col=uColor*(0.55+0.6*dif);
-  col=mix(col,uColor*1.55,uEmiss);
+  /* İki ölçekte fırça: ince darbeler + kaba lekeler */
+  float f1=firca(vW,n,uFircaOlcek.x);
+  float f2=firca(vW,n,uFircaOlcek.y);
+  float fr=(f1*0.62+f2*0.38);
+  /* ASIL HİLE: bantlamadan ÖNCE aydınlanmayı fırçayla bozuyoruz. Böylece ışık–
+     gölge sınırı düzgün bir yay olmaktan çıkıp darbeler boyunca dalgalanıyor —
+     guaj resimlerdeki düzensiz ton sınırının kaynağı bu. */
+  dif=clamp(dif+(fr-0.5)*0.46,0.0,1.0);
+  /* üç kademe, geçişleri dar tutulmuş */
+  float b=smoothstep(0.20,0.27,dif)*0.34
+         +smoothstep(0.48,0.55,dif)*0.34
+         +smoothstep(0.76,0.83,dif)*0.32;
+  vec3 isik=mix(uCool,uWarm,b);                 /* gölge soğuk, ışık sıcak */
+  vec3 col=uColor*(0.62+0.62*b)*isik;
+  col*=0.86+fr*0.28;                            /* yüzeye fırça değeri */
+  /* kenar ışığı: siluetin dış hattında soluk bir kaçak ışık */
+  vec3 v=normalize(uCam-vW);
+  float rim=pow(1.0-max(dot(n,v),0.0),3.0);
+  col+=uWarm*rim*0.30*(0.35+b);
+  col=mix(col,uColor*1.6,uEmiss);
   float d=distance(vW,uCam);
   col=mix(col,uFogCol,smoothstep(uFogR.x,uFogR.y,d));
   gl_FragColor=vec4(col,uAlpha);
@@ -181,12 +260,33 @@ GL.linkProgram(prog);
 if(!GL.getProgramParameter(prog,GL.LINK_STATUS)) throw new Error(GL.getProgramInfoLog(prog));
 GL.useProgram(prog);
 const U={}, A={};
-['uM','uV','uPr','uColor','uEmiss','uAlpha','uCam','uFogCol','uFogR','uLight'].forEach(n=>U[n]=GL.getUniformLocation(prog,n));
+['uM','uV','uPr','uColor','uEmiss','uAlpha','uCam','uFogCol','uFogR','uLight','uWarm','uCool','uFirca','uFircaOlcek'].forEach(n=>U[n]=GL.getUniformLocation(prog,n));
 ['aP','aN'].forEach(n=>{A[n]=GL.getAttribLocation(prog,n);GL.enableVertexAttribArray(A[n]);});
 GL.enable(GL.DEPTH_TEST);
-GL.uniform3f(U.uFogCol,0.043,0.024,0.125);
-GL.uniform2f(U.uFogR,24,58);
-{const l=[0.45,0.8,0.35],ll=Math.hypot(...l);GL.uniform3f(U.uLight,l[0]/ll,l[1]/ll,l[2]/ll);}
+/* Yüksek anahtarlı kar paleti: sis rengi = gökyüzü rengi, ikisi aynı olunca
+   uzak geometri gökyüzüne karışıyor (atmosferik perspektif). Menzil de kısa
+   tutuldu ki solma erken başlasın — referanstaki gibi. */
+GL.uniform3f(U.uFogCol,0.83,0.88,0.95);
+GL.uniform2f(U.uFogR,26,86);
+GL.uniform3f(U.uWarm,1.04,0.98,0.88);   /* ışık: hafif sıcak */
+GL.uniform3f(U.uCool,0.58,0.68,0.90);   /* gölge: doygun soğuk — değer aralığını bu açıyor */
+/* Işık kasten YATIK. Tepeden gelirse zeminin aydınlanması her yerde aynı olur,
+   tek banda düşer ve fırça hiçbir sınırı kesemez — doku görünmez kalır. Yatık
+   ışıkta zemin bant kenarına oturuyor ve darbeler ton sınırını dalgalandırıyor. */
+{const l=[0.55,0.62,0.48],ll=Math.hypot(...l);GL.uniform3f(U.uLight,l[0]/ll,l[1]/ll,l[2]/ll);}
+{ const tex=GL.createTexture();
+  GL.bindTexture(GL.TEXTURE_2D,tex);
+  GL.pixelStorei(GL.UNPACK_FLIP_Y_WEBGL,false);
+  GL.texImage2D(GL.TEXTURE_2D,0,GL.RGBA,GL.RGBA,GL.UNSIGNED_BYTE,fircaDokusuUret(512));
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_WRAP_S,GL.REPEAT);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_WRAP_T,GL.REPEAT);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MIN_FILTER,GL.LINEAR_MIPMAP_LINEAR);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MAG_FILTER,GL.LINEAR);
+  GL.generateMipmap(GL.TEXTURE_2D);
+  GL.activeTexture(GL.TEXTURE0);GL.bindTexture(GL.TEXTURE_2D,tex);
+  GL.uniform1i(U.uFirca,0);
+  GL.uniform2f(U.uFircaOlcek,0.42,0.095);   /* ince darbe · kaba leke */
+}
 
 /* --- geometri üreticileri --- */
 function mesh(pos,nor,idx,mode){
@@ -304,13 +404,31 @@ function addObs(x,z,w,d,h,color,cyl){
   else STAT.push({geo:GEO.box,model:mModel(x,h/2,z,0,w,h,d),color,emiss:0});
 }
 /* duvarlar */
-addObs(0,-AR-1,AR*2+4,2,2.6,0x2c1a66);addObs(0,AR+1,AR*2+4,2,2.6,0x2c1a66);
-addObs(-AR-1,0,2,AR*2+4,2.6,0x2c1a66);addObs(AR+1,0,2,AR*2+4,2.6,0x2c1a66);
+addObs(0,-AR-1,AR*2+4,2,2.6,0xaebacd);addObs(0,AR+1,AR*2+4,2,2.6,0xaebacd);
+addObs(-AR-1,0,2,AR*2+4,2.6,0xaebacd);addObs(AR+1,0,2,AR*2+4,2.6,0xaebacd);
+/* Kar gölgesi yamaları — deterministik, zemine değer katıyor */
+const KAR=[];
+{ let r=12345; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
+  for(let i=0;i<26;i++){
+    const a=rnd()*6.283, d=3+rnd()*(AR-5);
+    KAR.push([Math.cos(a)*d, Math.sin(a)*d, 3+rnd()*7, rnd()*6.283,
+              rnd()<0.5?0xbccbe4:0xd2dcec]);
+  } }
+/* Değer çıpası: arena çevresinde ince koyu ağaç gövdeleri. Referansta soluk
+   karın okunmasını sağlayan şey bu koyu dikeyler; onlar olmadan her şey
+   yıkanmış görünüyor. */
+{ let r=777; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
+  for(let i=0;i<34;i++){
+    const a=rnd()*6.283, d=AR-1.5+rnd()*7;
+    const x=Math.cos(a)*d, z=Math.sin(a)*d, h=5+rnd()*7;
+    STAT.push({geo:GEO.cyl,model:mModel(x,0,z,rnd()*0.4-0.2,0.34+rnd()*0.3,h,0.34+rnd()*0.3),
+               color:rnd()<0.5?0x6b7590:0x59637d,emiss:0});
+  } }
 /* siperler (deterministik yerleşim) */
 [[6,4,0],[-7,6,0],[10,-6,1],[-11,-4,0],[3,12,0],[-4,-13,1],[14,8,0],[-15,10,0],[12,-14,1],[-9,-11,0],[0,-8,0],[-2,18,1],[18,-2,0],[-19,-8,0]]
 .forEach((s,i)=>{
-  if(s[2]) addObs(s[0],s[1],1.6,1.6,2.5,0x3a2a72,true);
-  else addObs(s[0],s[1],2.2+(i%3)*0.7,1.7+(i%2)*0.9,1.35+(i%4)*0.35,i%2?0x453690:0x54409f);
+  if(s[2]) addObs(s[0],s[1],1.6,1.6,2.5,0x8d9db9,true);
+  else addObs(s[0],s[1],2.2+(i%3)*0.7,1.7+(i%2)*0.9,1.35+(i%4)*0.35,i%2?0xaebedb:0x93a4c2);
 });
 
 /* --- çarpışma yardımcıları --- */
@@ -507,7 +625,7 @@ function drawPip(lm,pozId){
     pctx.globalAlpha=1;pctx.fillStyle=col;
     for(const q of lm){pctx.beginPath();pctx.arc(X(q),Y(q),3,0,6.28);pctx.fill();}
   } else {
-    pctx.fillStyle='rgba(255,255,255,.3)';pctx.font='26px sans-serif';
+    pctx.fillStyle='rgba(255,255,255,.45)';pctx.font='26px sans-serif';
     pctx.textAlign='center';pctx.textBaseline='middle';pctx.fillText('✋?',w/2,h/2);
   }
 }
@@ -920,15 +1038,19 @@ function drawEnemies(now){
    ÇİZİM
    ============================================================= */
 function render(now){
-  GL.clearColor(0.043,0.024,0.125,1);
+  GL.clearColor(0.83,0.88,0.95,1);
   GL.clear(GL.COLOR_BUFFER_BIT|GL.DEPTH_BUFFER_BIT);
   GL.uniformMatrix4fv(U.uPr,false,mPersp(FOV,W/H,0.1,120));
   GL.uniformMatrix4fv(U.uV,false,mLookAt(camX,camY,camZ,camX+camFx*10,camY+camFy*10,camZ+camFz*10));
   GL.uniform3f(U.uCam,camX,camY,camZ);
   GL.disable(GL.BLEND);GL.depthMask(true);
   /* zemin + ızgara */
-  draw(GEO.box,mModel(0,-0.06,0,0,AR*2+6,0.1,AR*2+6),0x171040,0);
-  draw(GEO.grid,mModel(0,0.02,0,0,1,1,1),0x5b2ee0,0.5);
+  draw(GEO.box,mModel(0,-0.06,0,0,AR*2+6,0.1,AR*2+6),0xdfe7f1,0);   /* kar zemini */
+  /* Kar üstündeki gölge lekeleri. Referanstaki karın düz beyaz olmamasının
+     sebebi bu — doku yok, onun yerine hafif farklı tonda geniş yamalar. */
+  /* Opak çiziliyorlar: bu aşamada harmanlama kapalı, alfa yok sayılırdı. */
+  for(const y of KAR) draw(GEO.disc,mModel(y[0],0.028,y[1],y[3],y[2],1,y[2]*0.72),y[4],0);
+  draw(GEO.grid,mModel(0,0.035,0,0,1,1,1),0x93a8c8,0.18);
   /* engeller */
   for(const s of STAT) draw(s.geo,s.model,s.color,s.emiss);
   /* karakterler */
@@ -991,9 +1113,9 @@ function cizDusmanCan(){
     const w=56,h=6, x=p.x-w/2, y=p.y;
     const sol=Math.max(0.25,Math.min(1,14/p.z));          /* uzaktakiler sönükleşsin */
     ctx.globalAlpha=sol;
-    ctx.fillStyle='rgba(8,4,20,.75)';
+    ctx.fillStyle='rgba(255,255,255,.82)';
     ctx.beginPath();ctx.roundRect(x-2,y-2,w+4,h+4,5);ctx.fill();
-    ctx.fillStyle='rgba(255,255,255,.16)';
+    ctx.fillStyle='rgba(70,90,120,.22)';
     ctx.beginPath();ctx.roundRect(x,y,w,h,3);ctx.fill();
     ctx.fillStyle='#'+MU.ELEM[e.el].renk.toString(16).padStart(6,'0');
     if(o>0){ctx.beginPath();ctx.roundRect(x,y,w*o,h,3);ctx.fill();}
@@ -1004,7 +1126,7 @@ function cizDusmanCan(){
     if(e.telegraf>0.02){
       const cy=y-13, R=13;
       ctx.lineWidth=3;ctx.lineCap='round';
-      ctx.strokeStyle='rgba(255,255,255,.18)';
+      ctx.strokeStyle='rgba(70,90,120,.22)';
       ctx.beginPath();ctx.arc(p.x,cy,R,0,6.283);ctx.stroke();
       ctx.strokeStyle='#'+MU.ELEM[e.el].renk.toString(16).padStart(6,'0');
       ctx.beginPath();ctx.arc(p.x,cy,R,-Math.PI/2,-Math.PI/2+e.telegraf*6.283);ctx.stroke();
@@ -1017,7 +1139,7 @@ function cizDusmanCan(){
     /* usta element değiştirdiyse kısa bir uyarı */
     if(e.degisim>0.05){
       ctx.globalAlpha=sol*e.degisim;
-      ctx.font='bold 11px sans-serif';ctx.fillStyle='#fff';
+      ctx.font='bold 11px sans-serif';ctx.fillStyle='#2f3d55';
       ctx.fillText('element değişti',p.x,y-32);
       ctx.globalAlpha=sol;
     }
@@ -1049,12 +1171,12 @@ function drawOverlay(now){
   }
   /* joistik */
   if(J.active){
-    ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=2;
+    ctx.strokeStyle='rgba(50,70,100,.45)';ctx.lineWidth=2;
     ctx.beginPath();ctx.arc(J.ox,J.oy,J.max,0,6.28);ctx.stroke();
-    ctx.fillStyle='rgba(255,255,255,.6)';
+    ctx.fillStyle='rgba(50,70,100,.35)';
     ctx.beginPath();ctx.arc(J.ox+J.dx,J.oy+J.dy,24,0,6.28);ctx.fill();
   } else if(G.running){
-    ctx.globalAlpha=0.2;ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='13px sans-serif';
+    ctx.globalAlpha=0.42;ctx.fillStyle='#3f5074';ctx.textAlign='center';ctx.font='600 13px sans-serif';
     ctx.fillText('🕹️ sağ yarıda sürükle',W*0.75,H-30+Math.sin(now*0.003)*3);ctx.globalAlpha=1;
   }
 }
