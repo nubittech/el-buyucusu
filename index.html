@@ -65,7 +65,16 @@ canvas{touch-action:none}
 .bigbtn{margin-top:6px;background:linear-gradient(180deg,#ff9e3d,#e8552e);color:#fff;border:none;border-radius:16px;
  padding:16px 46px;font-size:18px;font-weight:800;letter-spacing:.5px;box-shadow:0 6px 24px rgba(255,110,40,.45)}
 .bigbtn:active{transform:scale(.96)}
-.devlink{margin-top:2px;font-size:12px;color:#8d7bd8;text-decoration:none;border-bottom:1px dashed rgba(141,123,216,.5);padding-bottom:1px}
+/* Kalibrasyon düğmesi. Eskiden 176×18 piksellik bir bağlantıydı; Apple'ın
+   önerdiği en küçük dokunma alanı 44pt ve birkaç piksel şaşınca altındaki
+   "ekrana dokun → başlat" katmanı yakalıyordu. Native kabukta tarayıcı geri
+   düğmesi de olmadığı için kalibrasyona ulaşmak imkânsıza yakındı. */
+.altbtn{display:block;width:100%;max-width:320px;margin:10px auto 0;
+  background:rgba(141,123,216,.14);color:#c3b6ff;border:1px solid rgba(141,123,216,.5);
+  border-radius:14px;padding:14px 18px;font-size:15px;font-weight:700;
+  text-decoration:none;text-align:center;min-height:48px;line-height:1.3;
+  -webkit-tap-highlight-color:transparent}
+.altbtn:active{transform:scale(.97);background:rgba(141,123,216,.24)}
 #gameOver{display:none}
 #gameOver .final{font-size:44px;color:#ffd166;font-weight:800}
 </style>
@@ -90,7 +99,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v7.5 · kamera · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v7.6 · kalibrasyon · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -100,8 +109,8 @@ canvas{touch-action:none}
     🕹️ <b>Sağ başparmak:</b> sağ yarıda sürükle → manevra
   </div>
   <button class="bigbtn" id="startBtn">Başlat</button>
-  <div class="note">Başlamak için ekranda herhangi bir yere dokunabilirsin. Kamera izni istenecek; görüntün cihazından çıkmaz, ekranda da gösterilmez. Oyun tamamen el hareketleriyle oynanıyor; kamera izni olmadan başlayamaz.</div>
-  <a class="devlink" id="lnkMuhur" href="muhur.html">🖐 Mühür tanıma testi (Faz 1) →</a>
+  <a class="altbtn" id="lnkMuhur" href="muhur.html">🖐 Kalibrasyon ve mühür testi</a>
+  <div class="note">Kamera izni istenecek; görüntün cihazından çıkmaz, ekranda da gösterilmez. Oyun tamamen el hareketleriyle oynanıyor; kamera izni olmadan başlayamaz.</div>
 </div>
 
 <div class="ov2" id="gameOver">
@@ -109,6 +118,9 @@ canvas{touch-action:none}
   <div class="final" id="finalScore">0</div>
   <div class="sub">ruh küresi yok edildi</div>
   <button class="bigbtn" id="retryBtn">Tekrar Dene</button>
+  <!-- Oyun başladıktan sonra kalibrasyona dönmenin başka yolu yoktu: native
+       kabukta tarayıcı geri düğmesi de yok, oyun da kendiliğinden bitmiyor. -->
+  <a class="altbtn" id="lnkMuhur2" href="muhur.html">🖐 Kalibrasyon ve mühür testi</a>
 </div>
 
 <script src="muhur.js?v=14"></script>
@@ -188,7 +200,7 @@ const statusEl=document.getElementById('status'), scoreEl=document.getElementByI
 const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById('hpLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v7.5 · kamera · motor hazır ✓';
+document.getElementById('subLine').textContent='v7.6 · kalibrasyon · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -2150,7 +2162,14 @@ const rbtn=document.getElementById('retryBtn');
 rbtn.addEventListener('click',retry);
 rbtn.addEventListener('touchend',e=>{e.preventDefault();retry();},{passive:false});
 const gov=document.getElementById('gameOver');
-['pointerdown','touchstart'].forEach(ev=>gov.addEventListener(ev,e=>{e.preventDefault();retry();},{passive:false}));
+/* Buradaki "her yere dokun → tekrar dene" kalıyor (ölüm ekranında hızlı
+   yeniden başlamak isteniyor) ama kalibrasyon düğmesini yutmamalı. */
+const lnk2=document.getElementById('lnkMuhur2');
+['pointerdown','touchstart','pointerup','touchend','click'].forEach(ev=>
+  lnk2.addEventListener(ev,e=>{e.stopPropagation();},{passive:true}));
+['pointerdown','touchstart'].forEach(ev=>gov.addEventListener(ev,e=>{
+  if(e.target===lnk2) return;
+  e.preventDefault();retry();},{passive:false}));
 
 let started=false;
 async function startGame(){
@@ -2171,15 +2190,13 @@ const sbtn=document.getElementById('startBtn');
 sbtn.addEventListener('click',startGame);
 sbtn.addEventListener('pointerup',e=>{e.stopPropagation();startGame();});
 sbtn.addEventListener('touchend',e=>{e.preventDefault();startGame();},{passive:false});
-const sov=document.getElementById('startOv');
-/* bağlantı, "ekranda herhangi bir yere dokun" davranışından muaf olmalı */
+/* "Ekranda herhangi bir yere dokun → başlat" KALDIRILDI. Kalibrasyon düğmesini
+   birkaç piksel ıskalayan her dokunuş oyunu başlatıyordu ve kullanıcı
+   kalibrasyona hiç ulaşamıyordu. getUserMedia bir kullanıcı hareketi
+   istiyor — "Başlat" düğmesine basmak da o hareket. */
 const lnk=document.getElementById('lnkMuhur');
 ['pointerdown','touchstart','pointerup','touchend','click'].forEach(ev=>
   lnk.addEventListener(ev,e=>{e.stopPropagation();},{passive:true}));
-['pointerdown','touchstart','click'].forEach(ev=>
-  sov.addEventListener(ev,e=>{
-    if(e.target===lnk) return;              /* bağlantıya dokunmak oyunu başlatmasın */
-    e.preventDefault();startGame();},{passive:false}));
 
 resize();
 let lastT=performance.now(),RDT=0.016;
