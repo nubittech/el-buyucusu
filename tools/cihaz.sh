@@ -39,10 +39,16 @@ echo "▸ derleniyor (takım $TAKIM)"
 # Otomatik imzalama şart: eldeki profiller Xcode yönetimli, manuel imzalama
 # onları kabul etmiyor ("is Xcode managed, but signing settings require a
 # manually managed profile").
+# ENABLE_DEBUG_DYLIB=NO şart. Xcode 15+ Debug derlemesinde uygulamayı
+# App + App.debug.dylib diye ayırıyor; o dylib yalnız Xcode kurarken
+# imzalanıyor, xcodebuild + devicectl yolunda imzasız kalıyor ve dyld
+# "no cdhash, completely unsigned" diyerek süreci öldürüyor. Uygulama
+# açılıyormuş gibi görünüp anında kapanmasının sebebi buydu.
 xcodebuild -project ios/App/App.xcodeproj -scheme App \
   -destination "platform=iOS,id=$HW" \
   -configuration Debug -derivedDataPath "$DD" \
   CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$TAKIM" \
+  ENABLE_DEBUG_DYLIB=NO \
   -allowProvisioningUpdates build 2>&1 \
   | grep -E "error:|warning: .*[Ss]igning|BUILD (SUCCEEDED|FAILED)" || true
 
@@ -51,16 +57,29 @@ APP="$DD/Build/Products/Debug-iphoneos/App.app"
 echo "  paket $(du -sh "$APP" | cut -f1)"
 
 kur_ve_baslat(){
-  xcrun devicectl device install app --device "$CORE" "$APP" >/dev/null
-  xcrun devicectl device process launch --device "$CORE" --terminate-existing "$PAKET" >/dev/null 2>&1
+  xcrun devicectl device install app --device "$CORE" "$APP" >/dev/null || return 1
+  xcrun devicectl device process launch --device "$CORE" --terminate-existing "$PAKET" >/dev/null 2>&1 || return 1
+  # "Launched application" mesajı YETMİYOR: dyld süreci başlattıktan hemen
+  # sonra öldürebiliyor ve komut yine başarı döndürüyor. Ayakta kaldığını
+  # görmeden başarı sayma.
+  sleep 3
+  # Süreç listesi paket kimliğini DEĞİL çalıştırılabilir yolu yazıyor
+  # (.../App.app/App). Paket kimliği aramak hep boş dönüyordu.
+  # Sütunlar boşlukla doldurulduğu için satır sonu çapası ($) tutmuyor.
+  xcrun devicectl device info processes --device "$CORE" 2>/dev/null \
+    | grep -qE "/App\.app/App[[:space:]]*$"
 }
 echo "▸ kuruluyor"
 if ! kur_ve_baslat; then
   # Çalışan uygulamanın üstüne kurulum, imza geçerli olsa bile iOS'un
   # "profil güvenilmedi" hatasıyla başlatmayı reddettiği bir duruma
   # sokabiliyor. Temiz kaldırma bunu geçiyor.
-  echo "  başlatılamadı — temiz kurulum deneniyor"
+  echo "  ayakta kalmadı — temiz kurulum deneniyor"
   xcrun devicectl device uninstall app --device "$CORE" "$PAKET" >/dev/null 2>&1 || true
-  kur_ve_baslat || { echo "✗ başlatılamadı" >&2; exit 1; }
+  if ! kur_ve_baslat; then
+    echo "✗ uygulama açılıp kapanıyor. Konsolu oku:" >&2
+    echo "  xcrun devicectl device process launch --device $CORE --console $PAKET" >&2
+    exit 1
+  fi
 fi
-echo "✓ telefonda çalışıyor${TEST:+  (TEST sayfası)}"
+echo "✓ telefonda çalışıyor ve ayakta${TEST:+  (TEST sayfası)}"
