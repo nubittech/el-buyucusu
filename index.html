@@ -90,7 +90,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v7.4 · kamera · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v7.5 · kamera · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -188,7 +188,7 @@ const statusEl=document.getElementById('status'), scoreEl=document.getElementByI
 const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById('hpLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v7.4 · kamera · motor hazır ✓';
+document.getElementById('subLine').textContent='v7.5 · kamera · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -1583,7 +1583,19 @@ function updatePlayer(dt){
    gökyüzünü kareye geri getirir; karakterin boyutunu ve yatay yerini
    değiştirmez — o ikisi KAM_UZAK ve KAM_SOL'a bağlı. Ayarlamak isteyeceğin
    üç sayı bunlar. */
-const KAM_UZAK=7.5, KAM_YUK=3.4, KAM_BAK=2.05;
+/* Karakterin ekranda kapladığı dikey oran = 1.85 / (2·d·tan(fov/2)), d =
+   kamera–karakter arası. Çözümler:  %20→8.0   %25→6.4   %30→5.3
+                                     %35→4.6   %40→4.0   %50→3.2
+   %20 istenmişti, ölçümde de %21 çıktı — ama uygulamada uzak duruyor. %37
+   denendiğinde dikey telefonda arenayı kapattı; %30'da karar kılındı.
+   Yaklaşınca kamerayı ALÇALTMAK şart: 3.4 yükseklikte 4.4 mesafeyle eğim
+   19°'ye çıkıyor, ufuk üstten %18'e düşüyor ve gökyüzü gidiyor.
+   Hazır ayarlar (karakter% / ufuk üstten%):
+     UZAK 4.4  YUK 2.2  BAK 1.50 → %37 / %35   (omuz üstü, yakın)
+     UZAK 5.4  YUK 2.4  BAK 1.55 → %30 / %35   ← şu an
+     UZAK 6.2  YUK 2.6  BAK 1.65 → %26 / %36
+     UZAK 7.5  YUK 3.4  BAK 2.05 → %21 / %33   (önceki) */
+const KAM_UZAK=5.4, KAM_YUK=2.4, KAM_BAK=1.55;
 /* Karakterin merkezden SOLA kayması, EKRAN GENİŞLİĞİNİN ORANI olarak.
    Önce sabit bir dünya kayması (2.35 birim) kullanılmıştı; o yalnız 16:9'da
    doğruydu. Ekranın yarı genişliği en/boy ile ölçekleniyor, dolayısıyla
@@ -1605,11 +1617,26 @@ function kamYan(){
   /* güvenlik: çok dar ekranda bile karakter kenardan içeride kalsın */
   return Math.min(KAM_SOL*2*yariGen, yariGen*0.62);
 }
+/* Kamera 7.5'ten 4.4'e inince engellerin arasına giriyor: o mesafede kayalar
+   kameranın önünde kalıyor ve oyuncuyu kapatıyor. Oyuncudan kameraya doğru
+   yürüyüp ilk engelden önce duruyoruz. Yaklaşma ani (görüşü hemen aç),
+   uzaklaşma yumuşak (engelden çıkarken zıplamasın). */
+let kamMesafe=KAM_UZAK;
+function kamSerbestMesafe(ileriX,ileriZ){
+  const adim=0.4, y=KAM_YUK*0.6;
+  for(let d=1.2; d<=KAM_UZAK; d+=adim){
+    if(pointBlocked(P.x-ileriX*d, y, P.z-ileriZ*d)) return Math.max(1.6,d-adim*1.5);
+  }
+  return KAM_UZAK;
+}
 function updateCamera(dt){
   const camTarget=LOCK?Math.atan2(LOCK.x-P.x,LOCK.z-P.z):P.yaw;
   camYaw=angLerp(camYaw,camTarget,1-Math.pow(0.03,dt));
   const ileriX=Math.sin(camYaw), ileriZ=Math.cos(camYaw);
-  const tx=P.x-ileriX*KAM_UZAK, tz=P.z-ileriZ*KAM_UZAK;
+  const hedefM=kamSerbestMesafe(ileriX,ileriZ);
+  kamMesafe = hedefM<kamMesafe ? hedefM
+            : kamMesafe+(hedefM-kamMesafe)*(1-Math.pow(0.08,dt));
+  const tx=P.x-ileriX*kamMesafe, tz=P.z-ileriZ*kamMesafe;
   const k=1-Math.pow(0.001,dt);
   camX+=(tx-camX)*k;camZ+=(tz-camZ)*k;camY+=(KAM_YUK-camY)*k;
   kameraBak();
@@ -1626,7 +1653,7 @@ function kameraBak(){
   const fl=Math.hypot(fx,fy,fz)||1;camFx=fx/fl;camFy=fy/fl;camFz=fz/fl;
 }
 function kameraKur(){
-  camYaw=0;camX=P.x;camY=KAM_YUK;camZ=P.z-KAM_UZAK;kameraBak();
+  camYaw=0;kamMesafe=KAM_UZAK;camX=P.x;camY=KAM_YUK;camZ=P.z-KAM_UZAK;kameraBak();
 }
 kameraKur();
 /* Oyuncunun element alışkanlığı — usta düşman buna göre karşılık seçer.
