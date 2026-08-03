@@ -6,7 +6,9 @@
   "scripts": {
     "www": "node tools/paketle.js",
     "sync": "npm run www && npx cap sync ios",
-    "ios": "npm run sync && npx cap open ios"
+    "ios": "npm run sync && npx cap open ios",
+    "cihaz": "bash tools/cihaz.sh",
+    "cihaz:test": "TEST=1 bash tools/cihaz.sh"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0"
