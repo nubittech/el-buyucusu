@@ -1,0 +1,18 @@
+{
+  "name": "golge-ninja",
+  "version": "0.7.5",
+  "private": true,
+  "description": "Gölge Ninja — el hareketiyle oynanan WebGL dövüş oyunu",
+  "scripts": {
+    "www": "node tools/paketle.js",
+    "sync": "npm run www && npx cap sync ios",
+    "ios": "npm run sync && npx cap open ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.0"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0"
+  }
+}

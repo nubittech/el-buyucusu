@@ -1,0 +1,12 @@
+{
+  "appId": "com.nubittech.golgeninja",
+  "appName": "Gölge Ninja",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#12172bff"
+  },
+  "server": {
+    "iosScheme": "capacitor"
+  }
+}

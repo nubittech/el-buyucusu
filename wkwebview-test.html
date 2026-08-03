@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>WKWebView Doğrulama — Gölge Ninja</title>
+<style>
+  :root{ --ok:#3ddc84; --uyari:#ffc043; --hata:#ff5f56; --metin:#e9eefb; --alt:#94a3c4; }
+  *{box-sizing:border-box}
+  body{margin:0;background:#12172b;color:var(--metin);
+       font:14px/1.5 -apple-system,system-ui,sans-serif;
+       padding:calc(env(safe-area-inset-top,0px) + 14px) 14px
+               calc(env(safe-area-inset-bottom,0px) + 14px);}
+  h1{font-size:17px;margin:0 0 2px}
+  .alt{color:var(--alt);font-size:12px;margin-bottom:14px}
+  .kart{background:#1b2340;border:1px solid #2c3660;border-radius:12px;
+        padding:11px 13px;margin-bottom:9px}
+  .kart h2{font-size:12px;margin:0 0 8px;color:var(--alt);
+           text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+  .satir{display:flex;justify-content:space-between;gap:10px;padding:3px 0;
+         border-bottom:1px solid rgba(255,255,255,.05)}
+  .satir:last-child{border-bottom:0}
+  .satir b{font-weight:600;color:var(--alt);flex:0 0 auto}
+  .satir span{text-align:right;font-variant-numeric:tabular-nums;
+              word-break:break-word}
+  .ok{color:var(--ok)} .uyari{color:var(--uyari)} .hata{color:var(--hata)}
+  button{width:100%;padding:13px;border:0;border-radius:11px;font-size:15px;
+         font-weight:700;background:#ff8f5e;color:#241206;margin-top:6px}
+  button:disabled{opacity:.45}
+  #wvOzet{font-size:13px;padding:11px 13px;border-radius:11px;margin-bottom:12px;
+          background:#1b2340;border:1px solid #2c3660}
+  video,canvas{display:block}
+  #wvVid{position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;top:0;left:0}
+</style>
+</head>
+<body>
+<h1>WKWebView Doğrulama</h1>
+<div class="alt">MediaPipe + WebGL'in native kabukta çalıştığını ölçer</div>
+
+<div id="wvOzet">Hazır. Testi başlat.</div>
+<div id="wvKunye" style="font:11px ui-monospace,Menlo,monospace;color:#94a3c4;margin:8px 0 4px;word-break:break-word"></div>
+<button id="wvBtn">Testi başlat</button>
+
+<div class="kart"><h2>Ortam</h2><div id="wvOrtam"></div></div>
+<div class="kart"><h2>MediaPipe</h2><div id="wvMp"></div></div>
+<div class="kart"><h2>Çıkarım</h2><div id="wvCik"></div></div>
+<div class="kart"><h2>WebGL</h2><div id="wvGl"></div></div>
+<div class="kart"><h2>Kamera</h2><div id="wvKam"></div></div>
+
+<video id="wvVid" playsinline autoplay muted></video>
+
+<script>
+/* Emscripten, `typeof X == 'undefined'` biçiminde global kontroller yapıyor.
+   Bir DOM elemanına id="err" veya id="dbg" verilirse tarayıcı o ismi window'a
+   koyuyor, kontrol yanlış sonuç veriyor ve MediaPipe patlıyor. Bu yüzden
+   BÜTÜN id'ler wv ön ekli. (Daha önce tam olarak bu tuzağa düşüldü.) */
+const E = id => document.getElementById(id);
+function yaz(kap, ad, deger, sinif){
+  const d=document.createElement('div'); d.className='satir';
+  d.innerHTML='<b></b><span></span>';
+  d.children[0].textContent=ad;
+  d.children[1].textContent=deger;
+  if(sinif) d.children[1].classList.add(sinif);
+  E(kap).appendChild(d);
+  return d;
+}
+function ozet(t, sinif){
+  const o=E('wvOzet'); o.textContent=t;
+  o.className=''; if(sinif) o.classList.add(sinif);
+}
+
+/* --- WASM SIMD algılama: MediaPipe hangi sürümü seçecek, onu gösterir --- */
+function simdVar(){
+  try{
+    /* SIMD içeren en küçük geçerli modül (v128 tipi kullanır) */
+    return WebAssembly.validate(new Uint8Array([
+      0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11
+    ]));
+  }catch(e){ return false; }
+}
+
+async function ortamTesti(){
+  const n=navigator;
+  yaz('wvOrtam','Platform', n.platform||'?');
+  yaz('wvOrtam','Ekran', `${innerWidth}×${innerHeight} @${devicePixelRatio||1}x`);
+  /* Capacitor native kabukta çalışıyor muyuz, yoksa Safari'de mi */
+  const native = !!(window.Capacitor && window.Capacitor.isNativePlatform &&
+                    window.Capacitor.isNativePlatform());
+  yaz('wvOrtam','Kabuk', native?'Capacitor (WKWebView)':'Tarayıcı',
+      native?'ok':'uyari');
+  yaz('wvOrtam','WebAssembly', typeof WebAssembly!=='undefined'?'var':'YOK',
+      typeof WebAssembly!=='undefined'?'ok':'hata');
+  const simd=simdVar();
+  yaz('wvOrtam','WASM SIMD', simd?'var (hızlı sürüm)':'yok (yavaş sürüm)',
+      simd?'ok':'uyari');
+  yaz('wvOrtam','SharedArrayBuffer',
+      typeof SharedArrayBuffer!=='undefined'?'var':'yok',
+      typeof SharedArrayBuffer!=='undefined'?'ok':'uyari');
+  yaz('wvOrtam','Çekirdek', n.hardwareConcurrency||'?');
+  return {native,simd};
+}
+
+function glTesti(){
+  const c=document.createElement('canvas'); c.width=c.height=64;
+  const gl=c.getContext('webgl')||c.getContext('experimental-webgl');
+  if(!gl){ yaz('wvGl','WebGL','YOK','hata'); return null; }
+  const ext=gl.getExtension('WEBGL_debug_renderer_info');
+  yaz('wvGl','Sürüm', gl.getParameter(gl.VERSION),'ok');
+  yaz('wvGl','GPU', ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):'gizli');
+  const vu=gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS);
+  yaz('wvGl','Vertex uniform', vu+' vektör  → '+Math.floor((vu-24)/4)+' kemik',
+      vu>=256?'ok':'uyari');
+  yaz('wvGl','Maks doku', gl.getParameter(gl.MAX_TEXTURE_SIZE)+'px');
+  /* Oyunun kullandığı her şey burada mı */
+  const npot=gl.getExtension('OES_element_index_uint');
+  yaz('wvGl','32-bit indeks', npot?'var':'yok (16-bit yeterli)', 'ok');
+  return gl;
+}
+
+/* Kare süresi ölçümü: ProMotion'da 120 Hz mi geliyor, onu da gösterir */
+function kareOlc(saniye=2){
+  return new Promise(res=>{
+    const t0=performance.now(); let n=0, enUzun=0, son=t0, bitti=false;
+    const ver=(durdu)=>{
+      if(bitti) return; bitti=true;
+      const gecen=(performance.now()-t0)/1000;
+      res({fps:durdu?0:n/gecen, enUzunKare:enUzun, durdu});
+    };
+    /* Duvar saati emniyeti: sekme arka plandayken (veya uygulama arka plana
+       atıldığında) rAF hiç tetiklenmiyor ve ölçüm sonsuza kadar asılı kalıyor.
+       Testin tamamını kilitlemesin. */
+    setTimeout(()=>ver(n<5), saniye*1000+1500);
+    (function tik(){
+      if(bitti) return;
+      const s=performance.now(); const d=s-son; son=s;
+      if(n>0 && d>enUzun) enUzun=d;
+      n++;
+      if(s-t0 < saniye*1000) requestAnimationFrame(tik);
+      else ver(false);
+    })();
+  });
+}
+
+/* Kamerasız çıkarım için sentetik kare. Simülatörde kamera yok; yine de
+   WASM + model + delege yolunun çalıştığını ve maliyetini ölçebiliyoruz.
+   UYARI: elin bulunmadığı karede landmark aşaması atlanabiliyor, o yüzden
+   bu süre GERÇEK EL süresinin ALT SINIRI. Gerçek sayı cihazda çıkar. */
+function sentetikKare(w,h){
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,w,h);
+  g.addColorStop(0,'#caa'); g.addColorStop(1,'#654');
+  x.fillStyle=g; x.fillRect(0,0,w,h);
+  /* kaba el benzeri siluet — avuç + beş parmak */
+  x.fillStyle='#d8b08c';
+  x.beginPath(); x.ellipse(w*0.5,h*0.62,w*0.13,h*0.17,0,0,7); x.fill();
+  for(let i=0;i<5;i++){
+    const a=-Math.PI/2+(i-2)*0.34;
+    x.save(); x.translate(w*0.5,h*0.60); x.rotate(a);
+    x.fillRect(-w*0.022,-h*0.30,w*0.044,h*0.30);
+    x.restore();
+  }
+  return c;
+}
+
+let landmarker=null, kaynak=null, kamAcik=false;
+
+async function mpTesti(simd){
+  const t0=performance.now();
+  let FilesetResolver, HandLandmarker;
+  try{
+    ({FilesetResolver,HandLandmarker}=await import('./mediapipe/vision_bundle.mjs'));
+    yaz('wvMp','Motor dosyası','yüklendi','ok');
+  }catch(e){
+    yaz('wvMp','Motor dosyası','HATA: '+e.message,'hata'); return null;
+  }
+  let vision;
+  try{
+    vision=await FilesetResolver.forVisionTasks('./mediapipe/wasm');
+    yaz('wvMp','WASM','yüklendi ('+(simd?'SIMD':'SIMD yok')+')','ok');
+  }catch(e){
+    yaz('wvMp','WASM','HATA: '+e.message,'hata'); return null;
+  }
+  const opts=d=>({
+    baseOptions:{modelAssetPath:'./mediapipe/hand_landmarker.task',delegate:d},
+    runningMode:'VIDEO', numHands:1
+  });
+  let delege='GPU';
+  try{
+    landmarker=await HandLandmarker.createFromOptions(vision,opts('GPU'));
+  }catch(e){
+    delege='CPU';
+    try{ landmarker=await HandLandmarker.createFromOptions(vision,opts('CPU')); }
+    catch(e2){ yaz('wvMp','Model','HATA: '+e2.message,'hata'); return null; }
+  }
+  yaz('wvMp','Delege', delege, delege==='GPU'?'ok':'uyari');
+  yaz('wvMp','Model','hand_landmarker.task yüklendi','ok');
+  yaz('wvMp','Açılış süresi', Math.round(performance.now()-t0)+' ms',
+      performance.now()-t0<4000?'ok':'uyari');
+  return landmarker;
+}
+
+async function kameraDene(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    yaz('wvKam','getUserMedia','API YOK','hata');
+    return false;
+  }
+  yaz('wvKam','getUserMedia','var','ok');
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+    const v=E('wvVid'); v.srcObject=s; await v.play();
+    const tr=s.getVideoTracks()[0], st=tr.getSettings();
+    yaz('wvKam','Akış', `${st.width}×${st.height} @${st.frameRate||'?'}fps`,'ok');
+    yaz('wvKam','Cihaz', tr.label||'(isimsiz)');
+    kamAcik=true; kaynak=v;
+    return true;
+  }catch(e){
+    yaz('wvKam','İzin/açılış', e.name+': '+e.message, 'hata');
+    yaz('wvKam','Not','Simülatörde kamera yoktur — gerçek cihazda tekrarla','uyari');
+    return false;
+  }
+}
+
+async function cikarimOlc(n=40){
+  if(!landmarker) return;
+  if(!kaynak) kaynak=sentetikKare(640,480);
+  const sureler=[]; let bulundu=0;
+  /* ilk çağrı derleme/ısınma içerir, ölçüme katma */
+  try{ landmarker.detectForVideo(kaynak,performance.now()); }catch(e){}
+  for(let i=0;i<n;i++){
+    const t=performance.now();
+    let r=null;
+    try{ r=landmarker.detectForVideo(kaynak,t+i*40); }catch(e){}
+    sureler.push(performance.now()-t);
+    if(r&&r.landmarks&&r.landmarks.length) bulundu++;
+    if(i%8===7) await new Promise(r=>setTimeout(r,0));   /* arayüz kilitlenmesin */
+  }
+  sureler.sort((a,b)=>a-b);
+  const ort=sureler.reduce((a,b)=>a+b,0)/sureler.length;
+  const p95=sureler[Math.floor(sureler.length*0.95)];
+  yaz('wvCik','Kaynak', kamAcik?'gerçek kamera':'sentetik kare (kamera yok)',
+      kamAcik?'ok':'uyari');
+  yaz('wvCik','Ortalama', ort.toFixed(1)+' ms', ort<20?'ok':ort<35?'uyari':'hata');
+  yaz('wvCik','p95', p95.toFixed(1)+' ms', p95<33?'ok':'uyari');
+  yaz('wvCik','En hızlı / yavaş',
+      sureler[0].toFixed(1)+' / '+sureler[sureler.length-1].toFixed(1)+' ms');
+  yaz('wvCik','El bulundu', Math.round(bulundu/n*100)+'%',
+      kamAcik?(bulundu>n*0.5?'ok':'uyari'):null);
+  const tavan=Math.floor(1000/ort);
+  yaz('wvCik','Teorik tavan', tavan+' çıkarım/sn',
+      tavan>=30?'ok':tavan>=20?'uyari':'hata');
+  if(!kamAcik)
+    yaz('wvCik','UYARI','El bulunmayan karede landmark aşaması atlanır — '+
+        'bu süre gerçek elin ALT SINIRI','uyari');
+  return {ort,p95,tavan,bulunduOran:bulundu/n};
+}
+
+async function testiCalistir(){
+  E('wvBtn').disabled=true;
+  ['wvOrtam','wvMp','wvCik','wvGl','wvKam'].forEach(i=>E(i).innerHTML='');
+  try{
+    ozet('Ortam okunuyor…');
+    const {native,simd}=await ortamTesti();
+    ozet('WebGL sınanıyor…');
+    const gl=glTesti();
+    ozet('Kare hızı ölçülüyor…');
+    const kare=await kareOlc(2);
+    if(kare.durdu){
+      yaz('wvGl','Kare hızı','ölçülemedi (sayfa arka planda)','uyari');
+    } else {
+      yaz('wvGl','Kare hızı', kare.fps.toFixed(0)+' fps'+(kare.fps>90?'  (ProMotion)':''),
+          kare.fps>=55?'ok':'uyari');
+      yaz('wvGl','En uzun kare', kare.enUzunKare.toFixed(1)+' ms',
+          kare.enUzunKare<40?'ok':'uyari');
+    }
+    ozet('Kamera deneniyor…');
+    await kameraDene();
+    ozet('MediaPipe yükleniyor… (ilk açılışta 20 sn sürebilir)');
+    const lm=await mpTesti(simd);
+    if(!lm){ ozet('MediaPipe YÜKLENEMEDİ — ayrıntı kartlarda','hata');
+             E('wvBtn').disabled=false; return; }
+    ozet('Çıkarım ölçülüyor…');
+    const c=await cikarimOlc(40);
+    const iyi = c && c.tavan>=24;
+    ozet(iyi
+      ? `GEÇTİ — motor çalışıyor, ${c.tavan} çıkarım/sn`+(kamAcik?'':' (kamerasız)')
+      : `DİKKAT — çıkarım yavaş (${c?c.tavan:0}/sn), ayrıntı kartlarda`,
+      iyi?'ok':'uyari');
+    /* Tek satırlık künye: telefon ekranına hepsi sığmıyor, kartları
+       kaydırmadan da bütün sayıları görebilmek için. */
+    const gpu=(()=>{const cc=document.createElement('canvas');
+      const g2=cc.getContext('webgl'); const x=g2&&g2.getExtension('WEBGL_debug_renderer_info');
+      return x?g2.getParameter(x.UNMASKED_RENDERER_WEBGL):'?';})();
+    E('wvKunye').textContent =
+      `${kare.durdu?'fps:?':'fps '+kare.fps.toFixed(0)}`+
+      ` · çıkarım ${c?c.ort.toFixed(1):'?'}ms (p95 ${c?c.p95.toFixed(0):'?'})`+
+      ` · el %${c?Math.round((c.bulunduOran||0)*100):0}`+
+      ` · delege ${E('wvMp').textContent.includes('GPU')?'GPU':'CPU'}`+
+      ` · ${gpu}`;
+  }catch(e){
+    ozet('BEKLENMEYEN HATA: '+e.message,'hata');
+  }
+  E('wvBtn').disabled=false;
+}
+E('wvBtn').addEventListener('click',testiCalistir);
+/* Kendiliğinden başlasın: simülatörde dokunma gönderilemiyor, cihazda da
+   ekstra adım olmasın. Buton yeniden çalıştırmak için duruyor. */
+addEventListener('load',()=>setTimeout(testiCalistir,400));
+</script>
+</body>
+</html>
