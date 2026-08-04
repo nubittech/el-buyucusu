@@ -240,8 +240,11 @@ function yeniDizi(){
    bir anlık poz da tetikler; çoğunluk şartı olmazsa hareket hâlindeki
    dağınık kayıplar pozu hiç onaylatmaz. İkisi birlikte gerekiyor. */
 const OY_TAVAN=64;                 /* ~1 sn @60fps — hiçbir koşulda üstüne çıkmasın */
-function oyla(D,id,now){
-  D.oylar.push({id,t:now});
+function oyla(D,id,now,yeniOrnek){
+  /* yeniOrnek=false → bu karede ÇIKARIM YAPILMADI, önceki sonuç yeniden
+     kullanılıyor. Oy kaydetmek pencereyi kopya örnekle doldurur ve
+     OY_ASGARI'nin "yeterince bağımsız gözlem" anlamını yok eder. */
+  if(yeniOrnek!==false) D.oylar.push({id,t:now});
   /* Budama yalnız "çok eski" koşuluna bağlıydı; saat geriye giderse (kayıtta
      ileri sarılmış zaman damgaları, sistem saati düzeltmesi) koşul hiç sağlanmaz
      ve tampon sınırsız büyür — oylama da çöker. Gelecek damgaları da at, ve
@@ -264,11 +267,13 @@ function oyla(D,id,now){
 }
 function diziSifirla(D){ D.dizi=[];D.sonMuhur=0; }
 
-function guncelle(D,id,dt,now){
+function guncelle(D,id,dt,now,yeniOrnek){
   const olaylar=[];
   if(now<D.cezaUntil){ D.aday=null;D.kilitMs=0;return olaylar; }
 
-  const oy=oyla(D,id,now);
+  /* dt her karede geçiyor (yükleme çubuğu akıcı kalsın), oy yalnız gerçek
+     çıkarım yapılan karede. */
+  const oy=oyla(D,id,now,yeniOrnek);
   D.aday=oy.aday||id||null;
   D.kilitMs=Math.min(KILIT_MS,oy.sure*(oy.oran>=OY_PAY?1:0.4));   /* gösterge çubuğu */
   const onayli=oy.kazanan;

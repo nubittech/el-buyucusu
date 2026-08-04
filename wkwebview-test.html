@@ -324,6 +324,11 @@ async function testiCalistir(){
       ` · el %${c?Math.round((c.bulunduOran||0)*100):0}`+
       ` · delege ${E('wvMp').textContent.includes('GPU')?'GPU':'CPU'}`+
       ` · ${gpu}`;
+    /* Cihaz konsoluna da bas: xcrun devicectl ... --console ile buradan
+       okunabiliyor, sonucu ekrandan elle aktarmaya gerek kalmıyor. */
+    console.log('OLCUM ' + E('wvKunye').textContent +
+      ' · kare ' + (c?c.kare:0) + ' · acilis ' +
+      (E('wvMp').textContent.match(/(\d+) ms/)||[,'?'])[1] + 'ms');
   }catch(e){
     ozet('BEKLENMEYEN HATA: '+e.message,'hata');
   }

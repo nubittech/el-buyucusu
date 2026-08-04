@@ -99,7 +99,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v7.8 · ölçüm · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v8.0 · 30Hz algı · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -123,7 +123,7 @@ canvas{touch-action:none}
   <a class="altbtn" id="lnkMuhur2" href="muhur.html">🖐 Kalibrasyon ve mühür testi</a>
 </div>
 
-<script src="muhur.js?v=14"></script>
+<script src="muhur.js?v=15"></script>
 <script>
 'use strict';
 /* =============================================================
@@ -200,7 +200,7 @@ const statusEl=document.getElementById('status'), scoreEl=document.getElementByI
 const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById('hpLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v7.8 · ölçüm · motor hazır ✓';
+document.getElementById('subLine').textContent='v8.0 · 30Hz algı · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -1448,32 +1448,60 @@ async function initCamera(bildir){
 }
 function mapN(v){ return Math.min(1,Math.max(0,(v-0.15)/0.7)); }
 function toScreen(lm){ return {x:mapN(1-lm.x)*W,y:mapN(lm.y)*H}; }
-let lastVideoTs=-1;
+/* =============================================================
+   EL ALGILAMA HIZI
+   Eski koşul `video.currentTime!==lastVideoTs` idi. Canlı kamera akışında
+   currentTime kare kare DEĞİL, sürekli akan bir oynatma saati: iki rAF karesi
+   arasında (~16 ms) her zaman ilerliyor, yani koşul hiç yanlış olmuyordu ve
+   çıkarım kamera hızında değil ÇİZİLEN HER KAREDE çalışıyordu — cihazda 61/sn.
+   Ölçülen çıkarım 12.6 ms olduğuna göre GPU her saniyenin 769 ms'ini el
+   tanımaya harcıyordu. Isınmanın kaynağı buydu.
+
+   Kamera zaten 30 fps veriyor; 61 kez çıkarım yapmak, karelerin yarısını
+   İKİNCİ KEZ işlemek demek — bilgi kazancı sıfır. 30 Hz'e sabitlemek hiçbir
+   şey kaybettirmiyor, çıkarım yükünü yarıya indiriyor.
+
+   Oylama penceresiyle uyum (muhur.js): OY_MS=260, OY_ASGARI=5, KILIT_MS=150.
+   30 Hz'de pencerede ~7.8 örnek var; 5 tanesi aynı olduğunda oran 0.64 ve
+   süre 4×33=133... KILIT_MS'i tam karşılamıyor gibi görünse de onay süresi
+   ilk-son oy arası ölçüldüğü için 6 örnekte 167 ms'ye çıkıyor. Bunun altına
+   inmek (24 Hz ve aşağısı) tek kare kaybında tanımayı düşürüyor.
+   ============================================================= */
+const ALGI_HZ=30;
+let algiBirikim=0, sonLm=null, sonPoz=null, sonYeni=false;
 /* Tanıma tamamen muhur.js'te — bu sayfada eşik ya da geometri yok.
    Kalibrasyon da aynı localStorage anahtarından geliyor: test sayfasında
    kaydettiğin el, oyunda da geçerli. */
-function readHand(now){
-  let pozId=null, lm=null, r=null;
-  if(S.camMode&&landmarker&&video.readyState>=2){
+function readHand(now,dtMs){
+  sonYeni=false;
+  if(!(S.camMode&&landmarker&&video.readyState>=2)) return null;
+  const araMs=1000/ALGI_HZ;
+  algiBirikim+=dtMs;
+  if(algiBirikim>=araMs){
+    /* Birikimi tek aralıkla sınırla: sekme arka plandan dönerken devasa bir
+       dt gelirse arka arkaya çıkarım kuyruğu oluşmasın. */
+    algiBirikim=Math.min(algiBirikim-araMs,araMs);
     try{
-      if(video.currentTime!==lastVideoTs){
-        lastVideoTs=video.currentTime;
-        const res=landmarker.detectForVideo(video,now);
-        lm=(res.landmarks&&res.landmarks[0])||null;
-      }
+      const res=landmarker.detectForVideo(video,now);
+      sonLm=(res.landmarks&&res.landmarks[0])||null;
+      sonPoz=sonLm?MU.siniflandir(MU.feat(sonLm)).id:null;
+      sonYeni=true;
     }catch(e){}
-    if(lm){
-      S.handSeen=true;S.lastHandTs=now;
-      r=MU.siniflandir(MU.feat(lm));
-      pozId=r.id;
-      const c=toScreen(lm[9]);S.cursor.x+=(c.x-S.cursor.x)*0.4;S.cursor.y+=(c.y-S.cursor.y)*0.4;S.cursor.ok=true;
-      if(r.id==='gun'){const t=toScreen(lm[8]);S.aim.x+=(t.x-S.aim.x)*0.35;S.aim.y+=(t.y-S.aim.y)*0.35;S.aim.ok=true;}
-    } else {
-      S.cursor.ok=false;
-      if(now-S.lastHandTs>1500){ S.handSeen=false; cancelSpell(); }
-    }
-    drawPip(lm,pozId);
   }
+  /* Çıkarım yapılmayan karede SON sonuç kullanılıyor. Eskiden bu dalda lm
+     null kalıyordu ve el "kayboldu" sayılıyordu; koşul hiç oluşmadığı için
+     ortaya çıkmamıştı, ama hız kısılınca her atlanan kare imleci söndürür ve
+     1.5 sn'lik "el yok" sayacını tetiklerdi. */
+  const lm=sonLm, pozId=sonPoz;
+  if(lm){
+    S.handSeen=true;S.lastHandTs=now;
+    const c=toScreen(lm[9]);S.cursor.x+=(c.x-S.cursor.x)*0.4;S.cursor.y+=(c.y-S.cursor.y)*0.4;S.cursor.ok=true;
+    if(pozId==='gun'){const t=toScreen(lm[8]);S.aim.x+=(t.x-S.aim.x)*0.35;S.aim.y+=(t.y-S.aim.y)*0.35;S.aim.ok=true;}
+  } else {
+    S.cursor.ok=false;
+    if(now-S.lastHandTs>1500){ S.handSeen=false; cancelSpell(); }
+  }
+  drawPip(lm,pozId);
   return pozId;
 }
 const BONES=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
@@ -1500,8 +1528,8 @@ function drawPip(lm,pozId){
    MÜHÜR → BECERİ → ATEŞ
    Dizi motoru muhur.js'te; burada yalnız olayları oyuna bağlıyoruz.
    ============================================================= */
-function updateSpell(pozId,dtMs,now){
-  for(const o of MU.guncelle(D,pozId,dtMs,now)){
+function updateSpell(pozId,dtMs,now,yeniOrnek){
+  for(const o of MU.guncelle(D,pozId,dtMs,now,yeniOrnek)){
     if(o.tip==='muhur') vibrate(12);
     else if(o.tip==='yuklemeBasladi') vibrate(25);
     else if(o.tip==='basarisiz') vibrate(60);
@@ -2206,8 +2234,8 @@ function tick(){
   const dt=Math.min(0.05,(now-lastT)/1000);lastT=now;G.t=now;RDT=dt;
   if(G.running){
     updateLock();
-    const pozId=readHand(now);
-    updateSpell(pozId,dt*1000,now);
+    const pozId=readHand(now,dt*1000);
+    updateSpell(pozId,dt*1000,now,sonYeni);
     updatePlayer(dt);
     updateEnemies(dt,now);
     updateShots(dt);
