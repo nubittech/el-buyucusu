@@ -5,3 +5,4 @@ ios/App/App/public/
 ios/App/build/
 *.xcuserdatad
 .DS_Store
+assets/*.png
