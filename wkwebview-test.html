@@ -223,38 +223,57 @@ async function kameraDene(){
   }
 }
 
-async function cikarimOlc(n=40){
+async function cikarimOlc(saniye=6){
   if(!landmarker) return;
   if(!kaynak) kaynak=sentetikKare(640,480);
-  const sureler=[]; let bulundu=0;
-  /* ilk çağrı derleme/ısınma içerir, ölçüme katma */
-  try{ landmarker.detectForVideo(kaynak,performance.now()); }catch(e){}
-  for(let i=0;i<n;i++){
+  /* ÖNEMLİ — ölçüm gerçek video KARELERİNE senkron.
+     Önceki sürüm 40 çıkarımı arka arkaya, ~200 ms içinde koşturuyordu. Kamera
+     30 fps veriyor, yani o pencerede yalnız ~6 yeni kare geliyor: çıkarımların
+     çoğu AYNI kare üzerinde çalışıyordu ve kullanıcının elini kaldırmaya
+     vakti olmuyordu. Sonuç "el %0" ve landmark aşaması hiç çalışmadığı için
+     gerçeğin çok altında bir süre. Artık yeni kare bekleniyor ve ölçüm
+     saniyelerce sürüyor. */
+  const sureler=[]; let bulundu=0, kare=0, sonTs=-1;
+  try{ landmarker.detectForVideo(kaynak,performance.now()); }catch(e){}  /* ısınma */
+  const t0=performance.now();
+  while(performance.now()-t0 < saniye*1000){
+    if(kamAcik){
+      if(kaynak.currentTime===sonTs){ await new Promise(r=>setTimeout(r,4)); continue; }
+      sonTs=kaynak.currentTime;
+    }
     const t=performance.now();
     let r=null;
-    try{ r=landmarker.detectForVideo(kaynak,t+i*40); }catch(e){}
+    try{ r=landmarker.detectForVideo(kaynak, kamAcik? t : t0+kare*40); }catch(e){}
     sureler.push(performance.now()-t);
     if(r&&r.landmarks&&r.landmarks.length) bulundu++;
-    if(i%8===7) await new Promise(r=>setTimeout(r,0));   /* arayüz kilitlenmesin */
+    kare++;
+    const kalan=Math.ceil(saniye-(performance.now()-t0)/1000);
+    ozet(`ELİNİ KAMERAYA TUT — ${kalan} sn · ${kare} kare · el %`+
+         Math.round(bulundu/kare*100), bulundu/kare>0.5?'ok':'uyari');
+    await new Promise(r=>setTimeout(r,0));
   }
+  if(!sureler.length) return null;
   sureler.sort((a,b)=>a-b);
   const ort=sureler.reduce((a,b)=>a+b,0)/sureler.length;
   const p95=sureler[Math.floor(sureler.length*0.95)];
+  const oran=bulundu/kare;
   yaz('wvCik','Kaynak', kamAcik?'gerçek kamera':'sentetik kare (kamera yok)',
       kamAcik?'ok':'uyari');
+  yaz('wvCik','Ölçülen kare', kare+' adet / '+saniye+' sn');
+  yaz('wvCik','El bulundu', Math.round(oran*100)+'%',
+      oran>0.5?'ok':'hata');
   yaz('wvCik','Ortalama', ort.toFixed(1)+' ms', ort<20?'ok':ort<35?'uyari':'hata');
   yaz('wvCik','p95', p95.toFixed(1)+' ms', p95<33?'ok':'uyari');
   yaz('wvCik','En hızlı / yavaş',
       sureler[0].toFixed(1)+' / '+sureler[sureler.length-1].toFixed(1)+' ms');
-  yaz('wvCik','El bulundu', Math.round(bulundu/n*100)+'%',
-      kamAcik?(bulundu>n*0.5?'ok':'uyari'):null);
   const tavan=Math.floor(1000/ort);
   yaz('wvCik','Teorik tavan', tavan+' çıkarım/sn',
       tavan>=30?'ok':tavan>=20?'uyari':'hata');
-  if(!kamAcik)
-    yaz('wvCik','UYARI','El bulunmayan karede landmark aşaması atlanır — '+
-        'bu süre gerçek elin ALT SINIRI','uyari');
-  return {ort,p95,tavan,bulunduOran:bulundu/n};
+  if(oran<0.5)
+    yaz('wvCik','GEÇERSİZ','El karelerin yarısından azında bulundu — landmark '+
+        'aşaması çalışmadı, bu süre gerçeğin ALT SINIRI. Elini kadraja alıp '+
+        'testi tekrarla.','hata');
+  return {ort,p95,tavan,bulunduOran:oran,kare};
 }
 
 async function testiCalistir(){
@@ -282,12 +301,18 @@ async function testiCalistir(){
     if(!lm){ ozet('MediaPipe YÜKLENEMEDİ — ayrıntı kartlarda','hata');
              E('wvBtn').disabled=false; return; }
     ozet('Çıkarım ölçülüyor…');
-    const c=await cikarimOlc(40);
-    const iyi = c && c.tavan>=24;
-    ozet(iyi
-      ? `GEÇTİ — motor çalışıyor, ${c.tavan} çıkarım/sn`+(kamAcik?'':' (kamerasız)')
-      : `DİKKAT — çıkarım yavaş (${c?c.tavan:0}/sn), ayrıntı kartlarda`,
-      iyi?'ok':'uyari');
+    const c=await cikarimOlc(6);
+    /* El bulunmayan ölçüm hızlı görünür ama GEÇERSİZDİR: landmark aşaması hiç
+       çalışmamıştır. Bunu "geçti" saymak yanlış karara götürür. */
+    const gecerli = c && (!kamAcik || c.bulunduOran>=0.5);
+    const iyi = gecerli && c.tavan>=24;
+    ozet(!gecerli
+      ? `GEÇERSİZ — el karelerin yalnız %${Math.round((c?c.bulunduOran:0)*100)}'inde bulundu. `+
+        `Elini kadraja al ve "Testi başlat"a bas.`
+      : iyi
+        ? `GEÇTİ — ${c.ort.toFixed(1)} ms/çıkarım, ${c.tavan}/sn`+(kamAcik?'':' (kamerasız)')
+        : `DİKKAT — çıkarım yavaş (${c.tavan}/sn), ayrıntı kartlarda`,
+      !gecerli?'hata':iyi?'ok':'uyari');
     /* Tek satırlık künye: telefon ekranına hepsi sığmıyor, kartları
        kaydırmadan da bütün sayıları görebilmek için. */
     const gpu=(()=>{const cc=document.createElement('canvas');
