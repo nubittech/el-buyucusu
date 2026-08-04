@@ -1,4 +1,10 @@
-/* OBJ + DOKU → oyunun mesh biçimi
+/* ARTIK KULLANILMIYOR — yerini tools/fbxdon.js aldı.
+   Bu araç DERİSİZ (kemiksiz, animasyonsuz) bir karakter.json üretiyor; oyunun
+   yükleyicisi o biçimi reddedip primitif ninjaya düşüyor. Yalnız elde FBX yokken
+   ve sadece duruşa bakmak istendiğinde anlamlı. Normal yol:
+     node tools/fbxdon.js "Ninja Idle.fbx" --anim kosu=Run.fbx
+
+   OBJ + DOKU → oyunun mesh biçimi
    Renderer'da UV yok, renk draw çağrısı başına tek uniform. O yüzden model
    RENK BÖLGELERİNE ayrılıyor: her köşe UV'sinden örnekleniyor, renkler
    kümeleniyor, üçgenler kümelere bölünüyor. Sonuç: bölge başına bir mesh,

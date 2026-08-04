@@ -24,6 +24,14 @@ function boyut(p){
   return fs.readdirSync(p).reduce((t,a)=>t+boyut(path.join(p,a)),0);
 }
 
+/* Sözdizimi bekçisi paketlemeden ÖNCE: gömülü script bir ad çakışmasıyla
+   ölmüşse belirti telefonda "motor bekleniyor…" ekranı oluyor ve sebebi
+   bulmak yarım saat sürüyor. İki kez oldu, bir daha gitmesin. */
+try{
+  require('child_process').execFileSync(process.execPath,
+    [path.join(__dirname,'sozdizim.js')],{stdio:'inherit'});
+}catch(e){ process.exit(1); }
+
 fs.rmSync(hedef,{recursive:true,force:true});
 fs.mkdirSync(hedef,{recursive:true});
 

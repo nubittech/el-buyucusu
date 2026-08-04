@@ -113,7 +113,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v8.7 · karakter · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v8.8 · animasyon · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -217,7 +217,7 @@ const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById(
 const enBarEl=document.getElementById('enBar'), enWrapEl=document.getElementById('enWrap'), enLblEl=document.getElementById('enLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v8.7 · karakter · motor hazır ✓';
+document.getElementById('subLine').textContent='v8.8 · animasyon · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -311,13 +311,10 @@ function fircaDokusuUret(boy){
 /* --- shader --- */
 function sh(type,src){const s=GL.createShader(type);GL.shaderSource(s,src);GL.compileShader(s);
   if(!GL.getShaderParameter(s,GL.COMPILE_STATUS)) throw new Error(GL.getShaderInfoLog(s));return s;}
-const prog=GL.createProgram();
-GL.attachShader(prog,sh(GL.VERTEX_SHADER,`
-attribute vec3 aP; attribute vec3 aN;
-uniform mat4 uM,uV,uPr;
-varying vec3 vN; varying vec3 vW;
-void main(){ vec4 w=uM*vec4(aP,1.0); vW=w.xyz; vN=mat3(uM)*aN; gl_Position=uPr*uV*w; }`));
-GL.attachShader(prog,sh(GL.FRAGMENT_SHADER,`
+/* Parça gölgelendiricisi İKİ programda paylaşılıyor: sıradan geometri ve derili
+   karakter. Kopyalamak yerine tek kaynak tutuluyor — ışık modeli ayrışırsa
+   karakter sahnenin içinden kopmuş gibi duruyor. */
+const FS_SAHNE=`
 precision mediump float;
 varying vec3 vN; varying vec3 vW;
 uniform vec3 uColor; uniform float uEmiss; uniform float uAlpha;
@@ -409,26 +406,49 @@ void main(){
   float d=distance(vW,uCam);
   col=mix(col,uFogCol,smoothstep(uFogR.x,uFogR.y,d));
   gl_FragColor=vec4(col,uAlpha);
-}`));
+}`;
+const SAHNE_U=['uM','uV','uPr','uColor','uEmiss','uAlpha','uCam','uFogCol','uFogR','uLight',
+               'uWarm','uCool','uFirca','uFircaOlcek','uKar','uKarRenk','uParilti','uDoku'];
+const prog=GL.createProgram();
+GL.attachShader(prog,sh(GL.VERTEX_SHADER,`
+attribute vec3 aP; attribute vec3 aN;
+uniform mat4 uM,uV,uPr;
+varying vec3 vN; varying vec3 vW;
+void main(){ vec4 w=uM*vec4(aP,1.0); vW=w.xyz; vN=mat3(uM)*aN; gl_Position=uPr*uV*w; }`));
+GL.attachShader(prog,sh(GL.FRAGMENT_SHADER,FS_SAHNE));
+/* Konumlar ELLE sabitleniyor: iki program aynı tamponları paylaşıyor, derleyici
+   aP/aN'ye farklı yuva verirse hangi dizinin açık kalacağı programa göre
+   değişir ve açık ama tamponsuz bir dizi INVALID_OPERATION üretir. */
+GL.bindAttribLocation(prog,0,'aP'); GL.bindAttribLocation(prog,1,'aN');
 GL.linkProgram(prog);
 if(!GL.getProgramParameter(prog,GL.LINK_STATUS)) throw new Error(GL.getProgramInfoLog(prog));
 GL.useProgram(prog);
 const U={}, A={};
-['uM','uV','uPr','uColor','uEmiss','uAlpha','uCam','uFogCol','uFogR','uLight','uWarm','uCool','uFirca','uFircaOlcek','uKar','uKarRenk','uParilti','uDoku'].forEach(n=>U[n]=GL.getUniformLocation(prog,n));
+SAHNE_U.forEach(n=>U[n]=GL.getUniformLocation(prog,n));
 ['aP','aN'].forEach(n=>{A[n]=GL.getAttribLocation(prog,n);GL.enableVertexAttribArray(A[n]);});
 GL.enable(GL.DEPTH_TEST);
 /* Yüksek anahtarlı kar paleti: sis rengi = gökyüzü rengi, ikisi aynı olunca
    uzak geometri gökyüzüne karışıyor (atmosferik perspektif). Menzil de kısa
    tutuldu ki solma erken başlasın — referanstaki gibi. */
-GL.uniform3f(U.uFogCol,...TEMA.gok);
-GL.uniform2f(U.uFogR,...TEMA.sisMenzil);
-GL.uniform3f(U.uKarRenk,(TEMA.karUst>>16&255)/255,(TEMA.karUst>>8&255)/255,(TEMA.karUst&255)/255);
-GL.uniform3f(U.uWarm,...TEMA.isik);   /* ışık tonu */
-GL.uniform3f(U.uCool,...TEMA.golge);  /* gölge tonu — karartma değil renk kaydırma */
-/* Işık kasten YATIK. Tepeden gelirse zeminin aydınlanması her yerde aynı olur,
-   tek banda düşer ve fırça hiçbir sınırı kesemez — doku görünmez kalır. Yatık
-   ışıkta zemin bant kenarına oturuyor ve darbeler ton sınırını dalgalandırıyor. */
-{const l=TEMA.gunes,ll=Math.hypot(...l);GL.uniform3f(U.uLight,l[0]/ll,l[1]/ll,l[2]/ll);}
+/* FS_SAHNE'yi kullanan HER programa aynı sahne sabitleri gitmeli. Derili
+   karakter programı eklendiğinde bunlar tek tek kopyalanırsa biri unutulup
+   karakter farklı ışıkta kalır — o yüzden tek yerden veriliyor. */
+function sahneSabitleri(u){
+  GL.uniform3f(u.uFogCol,...TEMA.gok);
+  GL.uniform2f(u.uFogR,...TEMA.sisMenzil);
+  GL.uniform3f(u.uKarRenk,(TEMA.karUst>>16&255)/255,(TEMA.karUst>>8&255)/255,(TEMA.karUst&255)/255);
+  GL.uniform3f(u.uWarm,...TEMA.isik);   /* ışık tonu */
+  GL.uniform3f(u.uCool,...TEMA.golge);  /* gölge tonu — karartma değil renk kaydırma */
+  /* Işık kasten YATIK. Tepeden gelirse zeminin aydınlanması her yerde aynı olur,
+     tek banda düşer ve fırça hiçbir sınırı kesemez — doku görünmez kalır. Yatık
+     ışıkta zemin bant kenarına oturuyor ve darbeler ton sınırını dalgalandırıyor. */
+  const l=TEMA.gunes,ll=Math.hypot(...l);GL.uniform3f(u.uLight,l[0]/ll,l[1]/ll,l[2]/ll);
+  GL.uniform1i(u.uFirca,3);
+  /* Ölçekler KABALAŞTIRILDI. 0.42 ince katmanı 2.4 birimde bir tekrarlıyordu;
+     doku gerçekten bağlanınca bu zeminde parazit gibi çıktı. 0.17 → 5.9
+     birim: fırça darbesi okunuyor, benek olmuyor. */
+  GL.uniform2f(u.uFircaOlcek,0.17,0.042);   /* ince darbe · kaba leke */
+}
 { const tex=GL.createTexture();
   GL.bindTexture(GL.TEXTURE_2D,tex);
   GL.pixelStorei(GL.UNPACK_FLIP_Y_WEBGL,false);
@@ -446,13 +466,44 @@ GL.uniform3f(U.uCool,...TEMA.golge);  /* gölge tonu — karartma değil renk ka
      üretecinde yapılan bütün ayarlar boşa gidiyordu. 3. birime hiçbir şey
      dokunmuyor (bloom 1 ve 2'yi, dokuYap 0'ı kullanıyor). */
   GL.activeTexture(GL.TEXTURE3);GL.bindTexture(GL.TEXTURE_2D,tex);
-  GL.uniform1i(U.uFirca,3);
   GL.activeTexture(GL.TEXTURE0);            /* 0'ı çalışma birimi olarak bırak */
-  /* Ölçekler KABALAŞTIRILDI. 0.42 ince katmanı 2.4 birimde bir tekrarlıyordu;
-     doku gerçekten bağlanınca bu zeminde parazit gibi çıktı. 0.17 → 5.9
-     birim: fırça darbesi okunuyor, benek olmuyor. */
-  GL.uniform2f(U.uFircaOlcek,0.17,0.042);   /* ince darbe · kaba leke */
 }
+sahneSabitleri(U);
+
+/* =============================================================
+   DERİLİ KARAKTER PROGRAMI
+   Kemik matrisleri uniform dizisinde; köşe başına en güçlü 4 kemik. Parça
+   gölgelendiricisi sahneyle AYNI (FS_SAHNE), yalnız köşe aşaması farklı.
+   Uniform bütçesi ölçüldü: cihaz 1024 vec4 veriyor, 34 kemik 136 tutuyor. */
+const DERI_KEMIK=34;
+const progDeri=GL.createProgram();
+GL.attachShader(progDeri,sh(GL.VERTEX_SHADER,`
+attribute vec3 aP; attribute vec3 aN; attribute vec4 aJ; attribute vec4 aW;
+uniform mat4 uM,uV,uPr;
+uniform mat4 uKemik[${DERI_KEMIK}];
+varying vec3 vN; varying vec3 vW;
+void main(){
+  /* Ağırlıklar 1'e normalize edildiği için matrisleri doğrudan harmanlamak
+     doğru sonucu veriyor (lineer harman skinning). */
+  mat4 sk = uKemik[int(aJ.x)]*aW.x + uKemik[int(aJ.y)]*aW.y
+          + uKemik[int(aJ.z)]*aW.z + uKemik[int(aJ.w)]*aW.w;
+  vec4 w = uM * (sk * vec4(aP,1.0));
+  vW = w.xyz;
+  vN = mat3(uM) * (mat3(sk) * aN);
+  gl_Position = uPr*uV*w;
+}`));
+GL.attachShader(progDeri,sh(GL.FRAGMENT_SHADER,FS_SAHNE));
+GL.bindAttribLocation(progDeri,0,'aP'); GL.bindAttribLocation(progDeri,1,'aN');
+GL.bindAttribLocation(progDeri,2,'aJ'); GL.bindAttribLocation(progDeri,3,'aW');
+GL.linkProgram(progDeri);
+if(!GL.getProgramParameter(progDeri,GL.LINK_STATUS)) throw new Error(GL.getProgramInfoLog(progDeri));
+GL.useProgram(progDeri);
+/* "UDER" — "UD" dağ programının uniform haritası, çakışırsa TÜM script ölüyor */
+const UDER={};
+SAHNE_U.forEach(n=>UDER[n]=GL.getUniformLocation(progDeri,n));
+UDER.uKemik=GL.getUniformLocation(progDeri,'uKemik[0]');
+sahneSabitleri(UDER);
+GL.useProgram(prog);
 
 /* =============================================================
    BLOOM — sonradan işleme
@@ -819,6 +870,20 @@ function mesh(pos,nor,idx,mode){
   m.vb=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,m.vb);GL.bufferData(GL.ARRAY_BUFFER,new Float32Array(pos),GL.STATIC_DRAW);
   m.nb=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,m.nb);GL.bufferData(GL.ARRAY_BUFFER,new Float32Array(nor),GL.STATIC_DRAW);
   m.ib=GL.createBuffer();GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER,m.ib);GL.bufferData(GL.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),GL.STATIC_DRAW);
+  return m;
+}
+/* Derili mesh: konum/normal + kemik indeksi ve ağırlığı. Ayrı bir üretici,
+   çünkü sıradan mesh'lerin j/w tamponu yok ve statik dekor kaynatıcısı
+   (birlestir) bu alanları bilmiyor — ikisini karıştırmak sessizce bozardı. */
+function deriMesh(p,n,j,w,ix){
+  const m={count:ix.length};
+  const tam=(veri,tip)=>{const b=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,b);
+    GL.bufferData(GL.ARRAY_BUFFER,new tip(veri),GL.STATIC_DRAW);return b;};
+  m.vb=tam(p,Float32Array); m.nb=tam(n,Float32Array);
+  m.jb=tam(j,Float32Array);            /* WebGL1'de öznitelik hep float */
+  m.wb=tam(w,Float32Array);
+  m.ib=GL.createBuffer();GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER,m.ib);
+  GL.bufferData(GL.ELEMENT_ARRAY_BUFFER,new Uint16Array(ix),GL.STATIC_DRAW);
   return m;
 }
 function boxGeo(){
@@ -1207,6 +1272,10 @@ const G={running:false,over:false,score:0,can:OY_CAN,flash:0,spawnT:1,t:0,
          enerji:EN_BAR, durgun:0, sarjEdiyor:false};
 const P={x:0,z:0,yaw:0,targetYaw:0,r:0.55};
 let camYaw=0,camX=0,camY=3.6,camZ=-7.5,camFx=0,camFy=0,camFz=1;
+/* Kare başına bir kez kuruluyor ama render() dışından da okunuyor: derili
+   karakter kendi programına geçtiği için aynı izdüşüm/görüş matrislerini
+   yeniden yüklemek zorunda. */
+let PROJ=null, VIEW=null;
 
 /* engeller: {minx,maxx,minz,maxz,h,geo,model,color} */
 const OBS=[],STAT=[];
@@ -2153,53 +2222,197 @@ function drawNinja(pm,C,run,ar,tp){
 const PPAL={SUIT:0x2a3160,DARK:0x1c2246,ACC:0xe03a4e,SKIN:0xf2d5b1,GOLD:0xffd166,EYE:0x14122e,eyeGlow:0,horns:false};
 
 /* =============================================================
-   KARAKTER MODELİ — tools/objdonustur.js çıktısı
-   Renderer'da UV yok, o yüzden model renk bölgelerine ayrılmış: bölge başına
-   bir mesh, bölge başına bir draw. 5 çağrı — primitif ninja 23 yiyordu.
+   DERİLİ KARAKTER — tools/fbxdon.js çıktısı (Mixamo FBX → JSON)
 
-   Bölge renkleri DOKUDAN GELMİYOR. shaded.png'de ışık pişmiş; onu kullanmak
-   guaj gölgelemesiyle çarpılıp çamura dönerdi. Doku yalnız "hangi bölge"yi
-   söylüyor, rengi biz veriyoruz. Sıra parlaklığa göre (açıktan koyuya):
-   saç → ten → kumaş açık → kumaş orta → kumaş koyu. */
+   ÇİZİM: renk bölgesi başına bir çağrı (5). Renk uniform kaldığı için AYNI
+   geometri farklı paletle yeniden çizilebiliyor; köşe rengine geçseydik her
+   palet ayrı tampon isterdi. Bölge renkleri dokudan GELMİYOR — shaded.png'de
+   ışık pişmiş, onu miras almak guaj gölgelemesiyle çarpılıp çamura dönerdi.
+   Doku yalnız "hangi bölge"yi söylüyor. Sıra parlaklığa göre (açıktan koyuya):
+   saç → ten → kumaş açık → kumaş orta → kumaş koyu.
+
+   ANİMASYON: yerel dörtlem + konum olarak saklanıyor, matris olarak değil.
+   Sebep: bosta↔koşu geçişini ancak dörtlem harmanı doğru yapar; matris
+   harmanı ara karelerde uzuvları kısaltıyor. Her karede 41 kemik hiyerarşiden
+   çözülüp 34'ü uniform diziye yükleniyor. */
 const MODEL_PALET=[0xe8e2d8, PPAL.SKIN, PPAL.SUIT, PPAL.DARK, 0x141a38];
+const ANIM_FPS=30;
 let MODEL=null;
 fetch('assets/karakter.json').then(r=>r.ok?r.json():null).then(j=>{
-  if(!j) return;
+  if(!j||!j.iskelet) return;                 /* eski biçim: derisiz, kullanma */
   /* parlaklığa göre sırala ki palet eşlemesi dosyadaki kümeleme sırasından
      bağımsız olsun — k-ortalama her çalıştırmada farklı sırada dönebiliyor */
-  const sirali=j.bolge.map((b,i)=>{
+  const sirali=j.bolge.map(b=>{
     const c=parseInt(b.renk.slice(1),16);
-    const l=(c>>16&255)*0.299+(c>>8&255)*0.587+(c&255)*0.114;
-    return {b,l};
+    return {b, l:(c>>16&255)*0.299+(c>>8&255)*0.587+(c&255)*0.114};
   }).sort((a,b)=>b.l-a.l).map(x=>x.b);
-  MODEL={boy:j.boy, parca:sirali.map((b,i)=>({
-    geo:mesh(b.p,b.n,b.i), renk:MODEL_PALET[Math.min(i,MODEL_PALET.length-1)]
-  }))};
-}).catch(()=>{});
+  const nK=j.iskelet.length;
+  MODEL={
+    boy:j.boy, iskelet:j.iskelet, anim:j.anim,
+    parca:sirali.map((b,i)=>({geo:deriMesh(b.p,b.n,b.j,b.w,b.i),
+                              renk:MODEL_PALET[Math.min(i,MODEL_PALET.length-1)]})),
+    /* çalışma tamponları — kare başına ayırma yapılmıyor */
+    ters:j.iskelet.map(k=>k.ters?new Float32Array(k.ters):null),
+    qA:new Float32Array(nK*4), tA:new Float32Array(nK*3),
+    qB:new Float32Array(nK*4), tB:new Float32Array(nK*3),
+    q :new Float32Array(nK*4), t :new Float32Array(nK*3),
+    gecici:new Float32Array(16),
+    kuresel:new Float32Array(nK*16),
+    kemikDizi:new Float32Array(DERI_KEMIK*16),
+    elIx:j.iskelet.findIndex(k=>/LeftHand$/.test(k.ad)),
+    kosuW:0, zBosta:0, zKosu:0
+  };
+  console.log(`MODEL: ${MODEL.parca.length} bölge, ${nK} kemik, `
+    +`animasyon [${Object.keys(j.anim).join(', ')}]`);
+}).catch(e=>console.warn('MODEL yüklenemedi',e));
+
+/* --- animasyon değerlendirme --------------------------------------------------
+   Döngü periyodu (kare-1)/30: son kare ilk kareyle AYNI pozu taşıyor (Mixamo
+   böyle dışa aktarıyor), o yüzden kare-1'e kadar örnekleyip başa sarmak
+   dikişsiz oluyor. kare'ye kadar sarsaydık bir kare duraklardı. */
+function animOrnek(a,zaman,qO,tO){
+  const p=a.sure>0 ? ((zaman%a.sure)+a.sure)%a.sure/a.sure : 0;
+  const f=p*(a.kare-1);
+  const f0=Math.min(a.kare-1,Math.floor(f)), f1=Math.min(a.kare-1,f0+1), al=f-f0;
+  for(let i=0;i<a.kanal.length;i++){
+    const c=a.kanal[i];
+    const i0=c.q.length>4?f0*4:0, i1=c.q.length>4?f1*4:0;
+    for(let k=0;k<4;k++) qO[i*4+k]=c.q[i0+k]+(c.q[i1+k]-c.q[i0+k])*al;
+    const j0=c.t.length>3?f0*3:0, j1=c.t.length>3?f1*3:0;
+    for(let k=0;k<3;k++) tO[i*3+k]=c.t[j0+k]+(c.t[j1+k]-c.t[j0+k])*al;
+  }
+}
+/* İki pozu harmanla. Dörtlem işaret denetimi ŞART: q ile -q aynı dönme ama
+   aralarında doğrusal geçiş uzun yoldan dolanıyor, uzuv bir anda takla atıyor.
+   (Aynı animasyonun kareleri arasında bu sorun yok — dönüştürücü işareti
+   zaten sürekli yazıyor; sorun İKİ AYRI animasyon arasında çıkıyor.) */
+function animHarman(qA,tA,qB,tB,w,qO,tO,n){
+  for(let i=0;i<n;i++){
+    const o=i*4;
+    let d=qA[o]*qB[o]+qA[o+1]*qB[o+1]+qA[o+2]*qB[o+2]+qA[o+3]*qB[o+3];
+    const s=d<0?-1:1;
+    let x=0,y=0,z=0,ww=0;
+    x =qA[o]  +(s*qB[o]  -qA[o]  )*w;
+    y =qA[o+1]+(s*qB[o+1]-qA[o+1])*w;
+    z =qA[o+2]+(s*qB[o+2]-qA[o+2])*w;
+    ww=qA[o+3]+(s*qB[o+3]-qA[o+3])*w;
+    const l=Math.hypot(x,y,z,ww)||1;
+    qO[o]=x/l; qO[o+1]=y/l; qO[o+2]=z/l; qO[o+3]=ww/l;
+    const p=i*3;
+    for(let k=0;k<3;k++) tO[p+k]=tA[p+k]+(tB[p+k]-tA[p+k])*w;
+  }
+}
+function qtMat(q,qi,t,ti,o,oi){          /* dörtlem+konum → sütun-öncelikli 4x4 */
+  const x=q[qi],y=q[qi+1],z=q[qi+2],w=q[qi+3];
+  const x2=x+x,y2=y+y,z2=z+z;
+  const xx=x*x2,xy=x*y2,xz=x*z2,yy=y*y2,yz=y*z2,zz=z*z2,wx=w*x2,wy=w*y2,wz=w*z2;
+  o[oi  ]=1-(yy+zz); o[oi+1 ]=xy+wz;     o[oi+2 ]=xz-wy;      o[oi+3 ]=0;
+  o[oi+4]=xy-wz;     o[oi+5 ]=1-(xx+zz); o[oi+6 ]=yz+wx;      o[oi+7 ]=0;
+  o[oi+8]=xz+wy;     o[oi+9 ]=yz-wx;     o[oi+10]=1-(xx+yy);  o[oi+11]=0;
+  o[oi+12]=t[ti];    o[oi+13]=t[ti+1];   o[oi+14]=t[ti+2];    o[oi+15]=1;
+}
+function mat16Carp(a,ai,b,bi,o,oi){      /* o = a*b, düz dizilerde ofsetli */
+  for(let c=0;c<4;c++){
+    const b0=b[bi+c*4],b1=b[bi+c*4+1],b2=b[bi+c*4+2],b3=b[bi+c*4+3];
+    for(let r=0;r<4;r++)
+      o[oi+c*4+r]=a[ai+r]*b0+a[ai+4+r]*b1+a[ai+8+r]*b2+a[ai+12+r]*b3;
+  }
+}
+/* Hiyerarşiyi tek geçişte çöz. Dönüştürücü ebeveynin HER ZAMAN çocuktan önce
+   geldiğini doğruluyor, o yüzden ikinci geçişe gerek yok. */
+function iskeletCoz(md){
+  const isk=md.iskelet, G=md.kuresel, K=md.kemikDizi, ge=md.gecici;
+  for(let i=0;i<isk.length;i++){
+    qtMat(md.q,i*4,md.t,i*3,ge,0);
+    const e=isk[i].ebeveyn;
+    if(e<0) for(let k=0;k<16;k++) G[i*16+k]=ge[k];
+    else mat16Carp(G,e*16,ge,0,G,i*16);
+    const s=isk[i].shader;
+    if(s>=0) mat16Carp(G,i*16,md.ters[i],0,K,s*16);
+  }
+}
+/* Derili karakteri çiz: program değiştir, kemikleri yükle, bölgeleri bas. */
+function deriCiz(md,mm,palet){
+  GL.useProgram(progDeri);
+  GL.uniformMatrix4fv(UDER.uPr,false,PROJ);
+  GL.uniformMatrix4fv(UDER.uV,false,VIEW);
+  GL.uniform3f(UDER.uCam,camX,camY,camZ);
+  GL.uniformMatrix4fv(UDER.uM,false,mm);
+  GL.uniformMatrix4fv(UDER.uKemik,false,md.kemikDizi);
+  GL.uniform1f(UDER.uEmiss,0);GL.uniform1f(UDER.uAlpha,1);
+  GL.uniform1f(UDER.uKar,0.35);GL.uniform1f(UDER.uParilti,TEMA.parilti*0.4);
+  GL.uniform1f(UDER.uDoku,1);
+  GL.enableVertexAttribArray(2);GL.enableVertexAttribArray(3);
+  md.parca.forEach((pr,i)=>{
+    /* Parantez YERİ önemli: (palet&&palet[i])!==undefined yazınca palet null
+       iken null!==undefined doğru çıkıp null[i] okunuyordu — her karede
+       fırlatıp render'ı yarıda kesiyordu. */
+    const c=(palet && palet[i]!==undefined) ? palet[i] : pr.renk;
+    GL.uniform3f(UDER.uColor,(c>>16&255)/255,(c>>8&255)/255,(c&255)/255);
+    GL.bindBuffer(GL.ARRAY_BUFFER,pr.geo.vb);GL.vertexAttribPointer(0,3,GL.FLOAT,false,0,0);
+    GL.bindBuffer(GL.ARRAY_BUFFER,pr.geo.nb);GL.vertexAttribPointer(1,3,GL.FLOAT,false,0,0);
+    GL.bindBuffer(GL.ARRAY_BUFFER,pr.geo.jb);GL.vertexAttribPointer(2,4,GL.FLOAT,false,0,0);
+    GL.bindBuffer(GL.ARRAY_BUFFER,pr.geo.wb);GL.vertexAttribPointer(3,4,GL.FLOAT,false,0,0);
+    GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER,pr.geo.ib);
+    GL.drawElements(GL.TRIANGLES,pr.geo.count,GL.UNSIGNED_SHORT,0);
+  });
+  /* 2 ve 3 KAPATILMALI: ana program bu yuvaları bildirmiyor, açık kalırlarsa
+     sonraki çizimlerde tamponsuz dizi hatası veriyor (aynı hatayı tam ekran
+     geçişleri de vermişti). */
+  GL.disableVertexAttribArray(2);GL.disableVertexAttribArray(3);
+  GL.useProgram(prog);
+}
+/* AYAK KAYMASI — tahminle değil ölçümle ayarlandı.
+   Basma evresinde ayağın gövdeye göre geriye gitme hızı animasyonun "doğal yer
+   hızı"dır; ölçüldü: 4.43 birim/sn (adım 1.264 birim, devir 0.633 sn). Oyuncu
+   tam hızda 6.4 birim/sn gidiyor. 1.0 oynatmada ayak %31 kayıyordu.
+   Oran hıza DOĞRUSAL bağlı olduğu için her hızda kayma sıfıra iniyor.
+   Oyuncu hızı (updatePlayer'daki 6.4) değişirse bu sayı da değişmeli. */
+const KOSU_ORAN=6.4/4.43;                  /* = 1.445 */
 function drawWizard(now,dt){ /* NINJA */
+  const hizOran=J.active?Math.min(1,Math.hypot(J.dx,J.dy)/J.max):0;
   const moving=J.active&&Math.hypot(J.dx,J.dy)>5;
   armRaise+=((D.beceri?1:0)-armRaise)*Math.min(1,dt*8);
   const run=moving?Math.sin(now*0.014):0;
+  let h;
+  if(MODEL){
+    /* Sekme, eğilme ve salınım artık ANİMASYONUN içinde (kalça kanalı) —
+       üstüne prosedürel ekleme yapmak iki kat sallanma üretiyor. */
+    MODEL.kosuW+=((moving?1:0)-MODEL.kosuW)*Math.min(1,dt*9);
+    /* İKİ AYRI SAAT: boşta kendi doğal hızında, koşu yürüme hızına bağlı.
+       Tek saatte paylaşınca yavaş yürürken boşta da ağır çekim oluyordu. */
+    MODEL.zBosta+=dt;
+    MODEL.zKosu+=dt*KOSU_ORAN*Math.max(hizOran,0.25);
+    const A=MODEL.anim.bosta, B=MODEL.anim.kosu||MODEL.anim.bosta;
+    const n=MODEL.iskelet.length;
+    animOrnek(A,MODEL.zBosta,MODEL.qA,MODEL.tA);
+    animOrnek(B,MODEL.zKosu,MODEL.qB,MODEL.tB);
+    animHarman(MODEL.qA,MODEL.tA,MODEL.qB,MODEL.tB,MODEL.kosuW,MODEL.q,MODEL.t,n);
+    iskeletCoz(MODEL);
+    const sc=1.85/MODEL.boy;
+    const pm=M(mT(P.x,0,P.z),mRy(P.yaw),mRx(MODEL.kosuW*0.10));
+    deriCiz(MODEL,M(pm,mS(sc,sc,sc)),null);
+    /* El konumu KEMİKTEN okunuyor: beceri küresi elde duruyor ve animasyonla
+       birlikte hareket ediyor. Sabit noktaya bağlıyken kol sallanırken küre
+       havada asılı kalıyordu. */
+    const G=MODEL.kuresel, i=MODEL.elIx*16;
+    h=MODEL.elIx>=0?{hx:G[i+12]*sc,hy:G[i+13]*sc,hz:G[i+14]*sc}:{hx:0.42,hy:1.15,hz:0.10};
+    drawWizardEk(pm,h,now);
+    return;
+  }
   const bob=Math.sin(now*0.004)*0.03+(moving?Math.abs(Math.sin(now*0.014))*0.07:0);
   const lean=moving?0.14:0.03;
   const sway=(moving?Math.sin(now*0.014)*0.04:Math.sin(now*0.002)*0.015);
   const pm=M(mT(P.x,bob,P.z),mRy(P.yaw),mRx(lean),mRz(sway));
-  let h;
-  if(MODEL){
-    /* Model bind pozunda, animasyon yok — duruş, ölçek ve gölgelemeyi görmek
-       için. Ölçek: modelin boyu 1.90, primitif ninja 1.85. */
-    const sc=1.85/MODEL.boy;
-    const mm=M(pm,mS(sc,sc,sc));
-    for(const pr of MODEL.parca) draw(pr.geo,mm,pr.renk,0,1,0.35,TEMA.parilti*0.4);
-    /* el konumu becerinin toplandığı yer — modelde kemik yok, yaklaşık ver */
-    h={hx:0.42,hy:1.15,hz:0.10};
-  } else {
-    h=drawNinja(pm,PPAL,run,armRaise,now*0.007);
-  }
+  h=drawNinja(pm,PPAL,run,armRaise,now*0.007);
+  drawWizardEk(pm,h,now);
+}
+function drawWizardEk(pm,h,now){
   /* yüklenen beceri sol elde büyüyerek toplanır, rengi elementinin rengi */
   if(D.beceri){
-    const prog=D.yukTotal?D.yukMs/D.yukTotal:1;
-    const sc=0.12+prog*0.26+(prog>=1?Math.sin(now*0.02)*0.04:0);
+    /* "prog" DEĞİL: üstteki global prog WebGL programı, gölgelemek tehlikeli */
+    const oran=D.yukTotal?D.yukMs/D.yukTotal:1;
+    const sc=0.12+oran*0.26+(oran>=1?Math.sin(now*0.02)*0.04:0);
     draw(GEO.sph,M(pm,mT(h.hx,h.hy+0.14,h.hz+0.1),mS(sc,sc,sc)),MU.ELEM[D.beceri.el].renk,1);
   }
 }
@@ -2274,8 +2487,8 @@ function render(now){
   /* Sahne doğrudan ekrana değil, bloom için dokuya çiziliyor. */
   if(POST.sahne){ GL.bindFramebuffer(GL.FRAMEBUFFER,POST.sahne); GL.viewport(0,0,POST.en,POST.boy); }
   GL.clear(GL.COLOR_BUFFER_BIT|GL.DEPTH_BUFFER_BIT);
-  const PROJ=mPersp(FOV,W/H,0.1,220);
-  const VIEW=mLookAt(camX,camY,camZ,camX+camFx*10,camY+camFy*10,camZ+camFz*10);
+  PROJ=mPersp(FOV,W/H,0.1,220);
+  VIEW=mLookAt(camX,camY,camZ,camX+camFx*10,camY+camFy*10,camZ+camFz*10);
   /* 1) gökyüzü — derinlik yok, her şeyin arkası
      2) dağlar — kendi uzak izdüşümüyle, hâlâ derinlik yazmadan
      Bu ikisi clearColor'ın yerini aldı; artık karenin üst yarısı boş değil. */
