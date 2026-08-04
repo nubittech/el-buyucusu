@@ -50,14 +50,9 @@ function jitter(lm,s){const sc=d2v(lm[0],lm[9])||1e-6;const o=lm.map(p=>({x:p.x,
    o[i].x+=vx/vl*sc*0.10;o[i].y+=vy/vl*sc*0.10;}
   o[i].x+=gauss()*k;o[i].y+=gauss()*k;}return o;}
 
-/* Açılmış alt kümeye daraltılmış karar. siniflandir()'in kuralının aynısı. */
-function kisitliKarar(res, acik){
-  const ds = res.ds.filter(d => acik.includes(d.id));
-  if (!ds.length) return {id:null, red:'kume-bos'};
-  if (ds[0].d > res.esik) return {id:null, red:'uzak'};
-  if (ds.length > 1 && (ds[1].d/(ds[0].d||1e-6)) < res.oranEsik) return {id:null, red:'belirsiz'};
-  return {id:ds[0].id, red:null};
-}
+/* ARTIK SİMÜLASYON YOK: muhur.js'in kendi acikPozAyarla + siniflandir yolu
+   kullanılıyor. Önceki sürüm daraltmayı burada taklit ediyordu; kademeli
+   açılım sevk edildiğine göre gerçek kodun ölçülmesi gerekiyor. */
 
 /* Kademeler: silah ilk gelmek zorunda (onsuz ateş edilemiyor) */
 const KADEME = [
@@ -76,11 +71,11 @@ for (const sg of [0.045, 0.070]) {
   console.log('  ' + '-'.repeat(52));
   let öncekiDogru = null;
   for (const acik of KADEME) {
+    M.acikPozAyarla(acik);
     let tot=0, ok=0, red=0, yanlis=0;
     for (const n of acik) {
       for (let k=0;k<N;k++){
-        const res = M.siniflandir(M.feat(jitter(örnek(n, 0.35+Math.random()*0.65), sg)));
-        const kr = kisitliKarar(res, acik);
+        const kr = M.siniflandir(M.feat(jitter(örnek(n, 0.35+Math.random()*0.65), sg)));
         tot++;
         if (!kr.id) { red++; }
         else if (kr.id === n) ok++;

@@ -102,9 +102,35 @@ function kalYukle(){ try{const s=localStorage.getItem(KAL2_ANAHTAR);if(s)KAL=JSO
 function kalSakla(){ try{localStorage.setItem(KAL2_ANAHTAR,JSON.stringify(KAL));}catch(e){} }
 kalYukle();
 const ogrenildiMi=id=>(KAL.n&&KAL.n[id]>=KAYIT_ASGARI)||false;
+
+/* =============================================================
+   AÇIK POZLAR — kademeli açılım
+   Hikâye modunda oyuncu elementleri tek tek öğreniyor. Sınıflandırıcının
+   henüz açılmamış pozları aday göstermesi hem yanlış, hem gereksiz zor:
+   ölçümde (tools/kademeli.js) iki poz açıkken yanlış element atma oranı
+   %0.05, altı pozla %0.70 — oyundaki en pahalı hatada 14 kat fark. Yani
+   yeni oyuncu, en çok yardıma ihtiyacı olan kişi, en güvenilir tanımayı
+   alıyor ve zorluk eli alıştıkça kendiliğinden artıyor.
+
+   VARSAYILAN POLİTİKA: kalibre edilmiş pozlar = açık pozlar. Kalibrasyon
+   böylece engel değil ilerleme oluyor; hiçbir şey kalibre edilmemişse eski
+   davranış (hepsi açık) sürüyor. Hikâye modu geldiğinde acikPozAyarla ile
+   kümeyi doğrudan sürebilir. */
+let ACIK=null;                                   /* null → politika uygula */
+const acikPozAyarla=list=>{ ACIK=(list&&list.length)?list.slice():null; };
+function acikPozlar(){
+  if(ACIK) return POSES.filter(p=>ACIK.indexOf(p.id)>=0);
+  const kalibre=POSES.filter(p=>ogrenildiMi(p.id));
+  /* Hiç kalibrasyon yoksa hepsi açık. Varsa kalibre edilenler + silah:
+     silah olmadan hiçbir beceri ateşlenemez, o yüzden her zaman aday. */
+  if(!kalibre.length) return POSES.slice();
+  return POSES.filter(p=>p.id==='gun'||ogrenildiMi(p.id));
+}
 /* Öğrenilmiş mod ancak ALTISI birden kayıtlıysa açılır: yarısı sigma, yarısı
    ağırlıklı öklid mesafesiyle ölçülürse karşılaştırma geçersiz olur. */
-const ogrenilmisMod=()=>POSES.every(p=>ogrenildiMi(p.id));
+/* Açık pozların hepsi öğrenilmişse sigma modu. Karışık durumda (bir kısmı
+   sigma, kalanı öklid) mesafeler kıyaslanamaz olurdu. */
+const ogrenilmisMod=()=>{const a=acikPozlar();return a.length>0&&a.every(p=>ogrenildiMi(p.id));};
 function kalSayim(){ return POSES.filter(p=>ogrenildiMi(p.id)).length; }
 function kalSil(){ KAL={mu:{},sd:{},n:{}}; try{localStorage.removeItem(KAL2_ANAHTAR);}catch(e){} }
 
@@ -155,16 +181,20 @@ const uzaklik=(a,b,w)=>{const q=w||W;let s=0;for(let k=0;k<9;k++){const d=(a[k]-
 /* en yakın prototip + belirsizlik reddi:
    yanlış mühür atmaktansa hiç atmamak yeğdir */
 function siniflandir(f){
+  const havuz=acikPozlar();
+  if(!havuz.length) return {ds:[],id:null,red:'kume-bos',mod:'yok',esik:0,oranEsik:0};
+  /* Tek aday varsa oran testi anlamsız (ds[1] yok) — yalnız uzaklık bakılır. */
+  const tek=havuz.length===1;
   if(ogrenilmisMod()){
     /* sigma cinsinden: "bu kare, o pozun öğrenilmiş dağılımından kaç sapma uzakta" */
-    const ds=POSES.map(p=>({id:p.id,d:sigmaUzaklik(f,p.id)})).sort((a,b)=>a.d-b.d);
+    const ds=havuz.map(p=>({id:p.id,d:sigmaUzaklik(f,p.id)})).sort((a,b)=>a.d-b.d);
     const red = ds[0].d>SIGMA_ESIK ? 'uzak'
-              : (ds[1].d/(ds[0].d||1e-6))<SIGMA_ORAN ? 'belirsiz' : null;
+              : (!tek&&(ds[1].d/(ds[0].d||1e-6))<SIGMA_ORAN) ? 'belirsiz' : null;
     return {ds,id:red?null:ds[0].id,red,mod:'ogrenilmis',esik:SIGMA_ESIK,oranEsik:SIGMA_ORAN};
   }
-  const ds=POSES.map(p=>({id:p.id,d:uzaklik(f,PROTO[p.id],AGIRLIK(p.id))})).sort((a,b)=>a.d-b.d);
+  const ds=havuz.map(p=>({id:p.id,d:uzaklik(f,PROTO[p.id],AGIRLIK(p.id))})).sort((a,b)=>a.d-b.d);
   const red = ds[0].d>RED_MESAFE ? 'uzak'
-            : (ds[1].d/(ds[0].d||1e-6))<RED_ORAN ? 'belirsiz' : null;
+            : (!tek&&(ds[1].d/(ds[0].d||1e-6))<RED_ORAN) ? 'belirsiz' : null;
   return {ds,id:red?null:ds[0].id,red,mod:'varsayilan',esik:RED_MESAFE,oranEsik:RED_ORAN};
 }
 
@@ -385,7 +415,7 @@ global.MUHUR={
   feat,uzaklik,siniflandir,
   kalibrasyonYukle,kalibrasyonKaydet,kalibrasyonSifirla,kalibreMi,
   KAYIT_ASGARI,SIGMA_ESIK,SIGMA_ORAN,
-  ogrenildiMi,ogrenilmisMod,kalSayim,kalSil,
+  ogrenildiMi,ogrenilmisMod,kalSayim,kalSil,acikPozAyarla,acikPozlar,
   kayitBasla,kayitOrnek,kayitBitir,kayitIptal,
   get KAL(){return KAL;},
   YENER,YENILIR,ELEM,beceriBul,AVANTAJ,NOTR_ESIK,carpismaCoz,
