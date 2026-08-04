@@ -7,6 +7,7 @@ const kok=path.join(__dirname,'..'), hedef=path.join(kok,'www');
 
 const DOSYALAR=['index.html','muhur.html','muhur.js','wkwebview-test.html'];
 const KLASORLER=['mediapipe'];
+const SECMELI=['assets/karakter.json'];   /* varsa kopyala, yoksa sorun değil */
 
 function kopyalaKlasor(src,dst){
   fs.mkdirSync(dst,{recursive:true});
@@ -32,6 +33,13 @@ for(const f of DOSYALAR){
   if(!fs.existsSync(s)){ eksik.push(f); continue; }
   fs.copyFileSync(s,path.join(hedef,f));
   toplam+=boyut(s);
+}
+for(const f of SECMELI){
+  const src=path.join(kok,f);
+  if(!fs.existsSync(src)) continue;
+  const dst=path.join(hedef,f);
+  fs.mkdirSync(path.dirname(dst),{recursive:true});
+  fs.copyFileSync(src,dst); toplam+=boyut(src);
 }
 for(const k of KLASORLER){
   const s=path.join(kok,k);

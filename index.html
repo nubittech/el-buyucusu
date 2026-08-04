@@ -113,7 +113,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v8.6 · kademeli · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v8.7 · karakter · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -217,7 +217,7 @@ const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById(
 const enBarEl=document.getElementById('enBar'), enWrapEl=document.getElementById('enWrap'), enLblEl=document.getElementById('enLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v8.6 · kademeli · motor hazır ✓';
+document.getElementById('subLine').textContent='v8.7 · karakter · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -2151,6 +2151,31 @@ function drawNinja(pm,C,run,ar,tp){
 }
 /* oyuncu paleti: lacivert giysi, kırmızı bant, mat gözler */
 const PPAL={SUIT:0x2a3160,DARK:0x1c2246,ACC:0xe03a4e,SKIN:0xf2d5b1,GOLD:0xffd166,EYE:0x14122e,eyeGlow:0,horns:false};
+
+/* =============================================================
+   KARAKTER MODELİ — tools/objdonustur.js çıktısı
+   Renderer'da UV yok, o yüzden model renk bölgelerine ayrılmış: bölge başına
+   bir mesh, bölge başına bir draw. 5 çağrı — primitif ninja 23 yiyordu.
+
+   Bölge renkleri DOKUDAN GELMİYOR. shaded.png'de ışık pişmiş; onu kullanmak
+   guaj gölgelemesiyle çarpılıp çamura dönerdi. Doku yalnız "hangi bölge"yi
+   söylüyor, rengi biz veriyoruz. Sıra parlaklığa göre (açıktan koyuya):
+   saç → ten → kumaş açık → kumaş orta → kumaş koyu. */
+const MODEL_PALET=[0xe8e2d8, PPAL.SKIN, PPAL.SUIT, PPAL.DARK, 0x141a38];
+let MODEL=null;
+fetch('assets/karakter.json').then(r=>r.ok?r.json():null).then(j=>{
+  if(!j) return;
+  /* parlaklığa göre sırala ki palet eşlemesi dosyadaki kümeleme sırasından
+     bağımsız olsun — k-ortalama her çalıştırmada farklı sırada dönebiliyor */
+  const sirali=j.bolge.map((b,i)=>{
+    const c=parseInt(b.renk.slice(1),16);
+    const l=(c>>16&255)*0.299+(c>>8&255)*0.587+(c&255)*0.114;
+    return {b,l};
+  }).sort((a,b)=>b.l-a.l).map(x=>x.b);
+  MODEL={boy:j.boy, parca:sirali.map((b,i)=>({
+    geo:mesh(b.p,b.n,b.i), renk:MODEL_PALET[Math.min(i,MODEL_PALET.length-1)]
+  }))};
+}).catch(()=>{});
 function drawWizard(now,dt){ /* NINJA */
   const moving=J.active&&Math.hypot(J.dx,J.dy)>5;
   armRaise+=((D.beceri?1:0)-armRaise)*Math.min(1,dt*8);
@@ -2159,7 +2184,18 @@ function drawWizard(now,dt){ /* NINJA */
   const lean=moving?0.14:0.03;
   const sway=(moving?Math.sin(now*0.014)*0.04:Math.sin(now*0.002)*0.015);
   const pm=M(mT(P.x,bob,P.z),mRy(P.yaw),mRx(lean),mRz(sway));
-  const h=drawNinja(pm,PPAL,run,armRaise,now*0.007);
+  let h;
+  if(MODEL){
+    /* Model bind pozunda, animasyon yok — duruş, ölçek ve gölgelemeyi görmek
+       için. Ölçek: modelin boyu 1.90, primitif ninja 1.85. */
+    const sc=1.85/MODEL.boy;
+    const mm=M(pm,mS(sc,sc,sc));
+    for(const pr of MODEL.parca) draw(pr.geo,mm,pr.renk,0,1,0.35,TEMA.parilti*0.4);
+    /* el konumu becerinin toplandığı yer — modelde kemik yok, yaklaşık ver */
+    h={hx:0.42,hy:1.15,hz:0.10};
+  } else {
+    h=drawNinja(pm,PPAL,run,armRaise,now*0.007);
+  }
   /* yüklenen beceri sol elde büyüyerek toplanır, rengi elementinin rengi */
   if(D.beceri){
     const prog=D.yukTotal?D.yukMs/D.yukTotal:1;
