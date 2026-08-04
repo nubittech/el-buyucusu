@@ -384,6 +384,81 @@ yanlış elementi seçersen mermi seni bulur — geriye siper kalır.
 
 ---
 
+## 5b. Enerji ve şarj — TASARLANDI, kodda YOK
+
+Sınırsız güç yok. Her beceri enerji yiyor; enerji yalnız **durarak** doluyor.
+
+### Sayılar (yeni hesap, stat yükseltmesi olmadan)
+
+| | |
+|---|---|
+| Bar kapasitesi | **4 temel saldırı** |
+| Tam dolum | **2.0 sn** → bir birim 500 ms |
+| Hareketsizlik eşiği | **1.0 sn** (bu süre dolmadan şarj başlamaz) |
+| Boştan ilk beceriye | 1.5 sn |
+| Boştan mermi çıkana | 1.92–1.97 sn (üstüne ölçülmüş 417–467 ms atış maliyeti) |
+
+**Kesinti cezası eşiktedir.** Şarj sırasında kaçarsan 1.0 sn'lik eşik sıfırlanır.
+Bu yüzden kesintili şarj çok verimsiz — asıl karar "dişini sık ve dur" ile
+"kaç, az enerjiyle idare et" arasındadır.
+
+**Hasar şarjı BOZMAZ.** Yalnız hasar yersin. Baskı altında hiç şarj olamama
+kilidini bu önlüyor; bedel canın, dolayısıyla karar can↔enerji takası oluyor.
+
+### Beceri maliyetleri
+
+| Zincir | Şarj süresi | Enerji | Güç katı |
+|---|---|---|---|
+| 1 mühür (Temel) | 250 ms | 1 birim | 1.0 |
+| 2 mühür | 700 ms | 2 birim | 1.5–1.6 |
+| 3 mühür (zincir) | 1200 ms | 3 birim | 2.6 |
+
+**Dikkat — kombo hasar başına DAHA PAHALI.** Dolu bar 4 temel = 4.0 güç
+verirken, 2 kombo = 3.2 güç veriyor. Yani kombolar ham hasarla kendini
+ödemiyor; değerlerini **etkiden** almak zorundalar (alan reddi, gecikmeli
+düşüş, takip, siper delme). Bu kasıtlıdır: kombo "daha çok vurmak" değil,
+"başka türlü vurmak" olmalı.
+
+### Blok penceresi — sayıların yarattığı gerginlik
+
+Düşman telegrafı 1100 ms. Telegraf başladığı anda oyuncunun durumu:
+
+| Oyuncunun hâli | Temiz okuma | %40 kare kaybı |
+|---|---|---|
+| Bar dolu, hareket halinde | +633 ms yetişir | +444 ms yetişir |
+| Durdu, 1.0 sn geçti (şarj yeni başladı) | **+133 ms yetişir** | −56 ms yetişmez |
+| Durdu, 0.5 sn geçti | −367 ms | −556 ms |
+| Yeni durdu, bar boş | −867 ms | −1056 ms |
+
+Yani "son anda blok" **+133 ms**'lik bir paya sıkışıyor: garanti değil, refleks.
+Kötü tanıma koşulunda pencere kapanıyor — tanıma kalitesi doğrudan oynanışa
+bağlanıyor.
+
+### Stat yükseltmeleri neyi değiştirir
+
+| Yükseltme | Etki |
+|---|---|
+| Bar büyür (4 → 6) | daha uzun baskı, daha seyrek durma |
+| Dolum hızlanır (2.0 → 1.4 sn) | mola kısalır |
+| **Eşik düşer (1.0 → 0.6 sn)** | **blok payı +400 ms** — en kritik yükseltme |
+
+Üçüncüsü yukarıdaki tabloyu doğrudan değiştirir: eşik 0.6 sn'ye inerse kötü
+koşulda bile blok yetişir. Stat yükseltmesi soyut bir sayı değil, "son anda
+kurtulabilir miyim" oluyor.
+
+### Açık denge sorunu
+
+Düşman 2.4–3.0 sn'de bir atıyor. Tam bar için 3 sn durmak yalnız **1 atış**
+yedirtiyor (ortalama 16 hasar / 100 can). Bu ucuz olabilir. Dengeleyen iki şey:
+duran oyuncunun ıskalanmaması (düşman kestirme yapmıyor), ve her kaçışın
+1 sn eşiğe mal olması.
+
+**Eksik:** düşman YZ'si şarjı görmüyor. Bugün oyuncu *mühür* şarj ederken
+sipere kaçıyor (`index.html` `oyuncuHazir`); enerji şarjında **tersini**
+yapmalı — baskıyı artırmalı. Bu eklenmeden mekanik dişsiz kalır.
+
+---
+
 ## 6. Dövüş döngüsü ve tempo
 
 - **Can:** hem oyuncu hem düşman can barına sahip. Tek isabet öldürmez; düello birkaç
