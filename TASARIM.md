@@ -459,6 +459,84 @@ yapmalı — baskıyı artırmalı. Bu eklenmeden mekanik dişsiz kalır.
 
 ---
 
+## 5c. İki mühürlük kombo tablosu — TASLAK, biri kodda
+
+İlk mühür OKULU seçiyor, ikincisi onu büküyor. 25 ikilinin tamamı elle
+tasarlanıyor: kural tabanlı üretim (aynı/yener/yenilir) yalnız hasar katsayısı
+veriyordu, o da §5b'deki matematiğe takılıyor — dolu bar 4 temel = 4.0 güç,
+2 kombo = 3.2 güç. **Kombo ham hasarla kendini ödemiyor, ETKİYLE ödemek
+zorunda.** Aşağıdakilerin hiçbiri "daha çok vurur" değil.
+
+Okul kimlikleri mermi verilerinden geliyor (`muhur.js` ELEM):
+
+| Element | Veri | Okul |
+|---|---|---|
+| 🔥 Ateş | hız 15, hasar 17, delme 1.00 | yıkım, kalıcı alan |
+| 🌪 Hava | hız 23, hasar 10, delme 0.70 | konum, itme |
+| 💧 Su | hız 16, hasar 15, takip 0.40 | kontrol, yavaşlatma |
+| ⚡ Yıldırım | hız 30, hasar 11, delme 1.55 | anlık, delme, zincir |
+| 🪨 Toprak | hız 10, hasar 26, delme 1.85 | savunma, engel |
+
+### Tablo
+
+| Dizi | Ad | Etki | Gereken sistem |
+|---|---|---|---|
+| 🔥🔥 | Ejder Nefesi | yakın menzilde koni püskürtme, geniş ama kısa | koni isabet |
+| 🔥🌪 | Alev Fırtınası | isabette çevreye sıçrayan alev | patlama yarıçapı |
+| 🔥💧 | Buhar Perdesi | çarpma noktasında görüş kapatan bulut | **görüş engeli** |
+| 🔥⚡ | **Gök Ateşi** ✅ | altında halka, 1 sn sonra düşer | gecikmeli alan ✅ |
+| 🔥🪨 | Lav Tuzağı | yere yapışan yanan alan, 4 sn | **kalıcı alan** |
+| 🌪🔥 | Ateş Rüzgârı | düz hatta iten dalga | **itme** |
+| 🌪🌪 | Kasırga | çevresinde dönen alan, yaklaşanı iter | kalıcı alan + itme |
+| 🌪💧 | Sis | geniş görüş kapatma, İKİ taraf da göremez | görüş engeli |
+| 🌪⚡ | Şimşek Adımı | rakibin arkasına anında geçiş | **ışınlanma** |
+| 🌪🪨 | Kum Fırtınası | ilerleyen alan, rakibi sürükler | hareketli alan + itme |
+| 💧🔥 | Kaynar Sıçrama | takipli mermi, isabette yanma | takip (var) + zamanlı hasar |
+| 💧🌪 | Dalga | geniş yay, siperden söker | koni + itme |
+| 💧💧 | Girdap | merkeze çeken alan | kalıcı alan + çekme |
+| 💧⚡ | İletken | ıslanan hedefe sonraki yıldırım ×2 | **durum etkisi** |
+| 💧🪨 | Çamur | yayılan alan, üstünden geçen yavaşlar | kalıcı alan + yavaşlatma |
+| ⚡🔥 | Plazma | anında ulaşan ışın, siperi deler | **hitscan** |
+| ⚡🌪 | Zincir | ilk hedeften ikinciye sekme | **sekme** |
+| ⚡💧 | Boşalma | ıslak hedefte alan hasarı | durum etkisi |
+| ⚡⚡ | Yıldırım Fırtınası | üç hızlı ardışık vuruş | çoklu atış |
+| ⚡🪨 | Sarsıntı | isabette rakip kısa süre mühür yapamaz | **sersemletme** |
+| 🪨🔥 | Magma Blok | önüne duvar, dokunanı yakar | **engel yaratma** |
+| 🪨🌪 | Toz | kaldırdığı toz görüşü kapatır | görüş engeli |
+| 🪨💧 | Bataklık | yavaşlatan geniş alan | kalıcı alan + yavaşlatma |
+| 🪨⚡ | Manyetik Taş | mermileri kendine çeker | **mermi yönlendirme** |
+| 🪨🪨 | Duvar | mermi kesen geçici siper | engel yaratma |
+
+### Gereken sistemler — asıl maliyet burada
+
+25 beceri 25 iş değil; **9 sistem** artı üstlerine ayar. Sistemler:
+
+| Sistem | Kaç beceri kullanıyor | Not |
+|---|---|---|
+| Gecikmeli alan | 1 | ✅ yapıldı |
+| Kalıcı alan (süreli, zemine yapışık) | 6 | en çok kazandıran |
+| İtme / çekme | 5 | oyuncu ve düşman fiziği |
+| Görüş engeli | 4 | **düşman YZ'si LOS okuyor** — YZ'yi de etkiler |
+| Durum etkisi (ıslak, yanan, yavaş) | 5 | zamanlı, HUD gerektirir |
+| Engel yaratma | 2 | OBS'e çalışma zamanı ekleme |
+| Işınlanma | 1 | kamera geçişi gerekir |
+| Hitscan / sekme | 2 | mermi yolundan ayrı |
+| Sersemletme | 1 | mühür girdisini kilitler |
+
+**Sıra önerisi** — sistem başına en çok beceri açan önce:
+1. Kalıcı alan (6 beceri) — gecikmeli alanın doğal uzantısı
+2. Durum etkisi (5) — ıslak/yanan/yavaş
+3. İtme/çekme (5)
+4. Görüş engeli (4) — YZ'ye de dokunduğu için dikkatli
+5. Kalan tekil sistemler
+
+**Uyarı:** görüş engeli düşman YZ'sinin `hasLOS` okumasını değiştiriyor. Sis
+içinde düşman oyuncuyu göremezse `yaklas` durumuna geçip üstüne yürüyor —
+yani sis, kaçış aracı değil çağırma aracı olabilir. Uygulanmadan önce
+`tools/yzdurum.js` ile ölçülmeli.
+
+---
+
 ## 6. Dövüş döngüsü ve tempo
 
 - **Can:** hem oyuncu hem düşman can barına sahip. Tek isabet öldürmez; düello birkaç
