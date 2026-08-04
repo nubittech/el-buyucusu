@@ -1322,6 +1322,45 @@ function pointBlocked(x,y,z){
   for(const b of OBS){ if(y<b.h && x>b.minx&&x<b.maxx&&z>b.minz&&z<b.maxz) return true; }
   return false;
 }
+/* =============================================================
+   DÜŞMAN YÖNLENDİRME
+   Eski hareket "düz git, sonra pushOut ile engelden çık"tı. Duvar kayması ve
+   dolanma olmadığı için düşman kayaya doğru yürüyüp geri itiliyor, net hareket
+   sıfır kalıyor ve orada titriyordu. Burada istenen yönden başlayarak açıları
+   tarıyoruz: engele girmeyen ilk yön seçiliyor, bu da bedavaya duvar kayması
+   ve engel dolanması veriyor.
+   ============================================================= */
+function bloke(x,z,r,y){
+  if(Math.abs(x)>AR-r||Math.abs(z)>AR-r) return true;
+  for(const b of OBS){
+    if(y>=b.h) continue;
+    const cx=Math.max(b.minx,Math.min(x,b.maxx)), cz=Math.max(b.minz,Math.min(z,b.maxz));
+    const dx=x-cx, dz=z-cz;
+    if(dx*dx+dz*dz < r*r) return true;
+  }
+  return false;
+}
+/* Taranan sapmalar: önce istenen yön, sonra iki yana açılarak. Son çare geri.
+   Düşman ilk uygun yönü alır — engelin kenarına değdiğinde yüzeye paralel
+   bileşen hayatta kalır, yani kayarak ilerler. */
+const TARAMA=[0,0.35,-0.35,0.75,-0.75,1.20,-1.20,1.75,-1.75,2.40,-2.40,3.14159];
+function yonSec(e,hx,hz,adim,r,gorusIste){
+  const a0=Math.atan2(hz,hx);
+  let yedek=null;
+  for(const da of TARAMA){
+    const a=a0+da, nx=e.x+Math.cos(a)*adim, nz=e.z+Math.sin(a)*adim;
+    if(bloke(nx,nz,r,0.9)) continue;
+    /* Görüş isteniyorsa (oyuncuyu göremiyoruz), görüşü AÇAN yönü tercih et;
+       düz yaklaşmak görüşü kapatan engelin içine yürümek demekti. */
+    if(gorusIste){
+      if(hasLOS(nx,nz,P.x,P.z,1.2)) return [Math.cos(a),Math.sin(a)];
+      if(!yedek) yedek=[Math.cos(a),Math.sin(a)];
+      continue;
+    }
+    return [Math.cos(a),Math.sin(a)];
+  }
+  return yedek||[0,0];
+}
 function hasLOS(x1,z1,x2,z2,y){
   const d=Math.hypot(x2-x1,z2-z1),steps=Math.max(2,Math.ceil(d/0.6));
   for(let i=1;i<steps;i++){const t=i/steps;
@@ -1752,7 +1791,10 @@ function updateEnemies(dt,now){
     }
 
     /* --- DAVRANIŞ DURUMU --- */
-    const yakin=e.tip==='hayalet'?6.5:4.2, uzak=e.tip==='hayalet'?13:9.5;
+    /* Menzil bandı DARALTILDI. Eski 4.2-9.5 aralığında düşman yalnız dolanıyor,
+       hiç yaklaşmıyordu; oyuncu 9 birim ötede siperin arkasındayken etrafında
+       tur atıp duruyordu. Dar bant, atış menzilinde kalmaya zorluyor. */
+    const yakin=e.tip==='hayalet'?5.5:3.6, uzak=e.tip==='hayalet'?9:6.5;
     let durum;
     if(!los) durum='yaklas';
     else if(e.cd<TELEGRAF/1000) durum='hazirlan';        /* atış yaklaştı: dur ve nişan al */
@@ -1772,8 +1814,30 @@ function updateEnemies(dt,now){
       if(sp2&&sp2.d>0.8){ const l=sp2.d||1; mx=(sp2.x-e.x)/l; mz=(sp2.z-e.z)/l; hiz*=1.25; }
       else { mx=-uz*e.ss;mz=ux*e.ss; }                   /* siper yoksa yandan kaç */
     }
-    e.x+=mx*hiz*dt;e.z+=mz*hiz*dt;
+    /* Dolanırken içeri kay: sabit yarıçapta tur atmak yerine menzile yaklaşsın */
+    if(durum==='dolan'){ mx+=ux*0.35; mz+=uz*0.35; }
+    const ml=Math.hypot(mx,mz);
+    const onceX=e.x, onceZ=e.z;
+    if(ml>1e-4){
+      const adim=hiz*dt;
+      let hx=mx/ml, hz=mz/ml;
+      /* Kaçış sürüyorsa istenen yön değil, kilitlenilen yön uygulanır. */
+      if(e.kacis>0){ e.kacis-=dt; hx=e.kx; hz=e.kz; }
+      /* Görüş yokken yaklaşırken görüşü açan yön tercih edilir. */
+      const [sx2,sz2]=yonSec(e,hx,hz,Math.max(adim,0.05),0.62,
+                             durum==='yaklas'&&!los&&!(e.kacis>0));
+      e.x+=sx2*adim; e.z+=sz2*adim;
+    }
     pushOut(e,0.6);
+    /* İçbükey bir cepte açgözlü yönlendirme her karede aynı kararı verip
+       kilitlenebiliyor. İlerleme durduğunda bir yana kilitlenip yarım saniye
+       o yönü sürdürmek döngüyü kırıyor. Ölçüm (4000 rota, gerçek yerleşim):
+       sıkışık kare eski %5.9 → yönlendirmeyle %0.4 → kaçışla %0.0. */
+    if(!(e.kacis>0) && Math.hypot(e.x-onceX,e.z-onceZ) < hiz*dt*0.25){
+      e.kacis=0.5;
+      const yan=Math.random()<0.5?1:-1;
+      e.kx=-uz*yan; e.kz=ux*yan;
+    }
 
     /* yakın temas: sıyırma hasarı — düello uzun sürsün */
     if(d<1.05){
@@ -1796,6 +1860,13 @@ function updateEnemies(dt,now){
     } else if(e.cd<=0&&!los){
       e.cd=0.35;                                          /* görüş yoksa boşuna bekleme */
     }
+    /* TELEGRAF ÇÖKÜŞÜ ONARIMI. Siperdeyken cd sürekli 0.35'e kuruluyor, telegraf
+       ise 1-cd/1.1 — yani görüş açıldığı an bar zaten %68-100 dolu oluyordu.
+       Oyuncuya kalan pay <=350 ms, ölçülmüş atış maliyeti 417-467 ms: karşılık
+       yetiştirmek aritmetik olarak imkânsızdı. Görüş yeniden açıldığında tam
+       telegraf garanti ediliyor. */
+    if(los && !e.sonLos) e.cd=Math.max(e.cd, TELEGRAF/1000 + 0.15);
+    e.sonLos=los;
   }
 }
 /* --- havada çarpışma: karşı taraftan iki mermi kesişirse muhur.js çözer --- */
