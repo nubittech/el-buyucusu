@@ -1173,7 +1173,8 @@ const MU=window.MUHUR;                       /* paylaşılan mühür/element kat
 const EL_IDS=Object.keys(MU.ELEM);
 const OY_CAN=100, EN_CAN=100;                /* düello birkaç doğru okuma sürsün */
 const MAX_DUSMAN=1;                          /* tek tek gelsinler: aynı anda tek düşman */
-const TELEGRAF=1100;                         /* düşman mührünü bu kadar önce belli eder */
+const TELEGRAF=1100;
+const SIPER_TAVAN=1.2;   /* düşman en çok bu kadar saniye saklanabilir, sonra saldırmak zorunda */                         /* düşman mührünü bu kadar önce belli eder */
 const G={running:false,over:false,score:0,can:OY_CAN,flash:0,spawnT:1,t:0};
 const P={x:0,z:0,yaw:0,targetYaw:0,r:0.55};
 let camYaw=0,camX=0,camY=3.6,camZ=-7.5,camFx=0,camFy=0,camFz=1;
@@ -1181,10 +1182,25 @@ let camYaw=0,camX=0,camY=3.6,camZ=-7.5,camFx=0,camFy=0,camFz=1;
 /* engeller: {minx,maxx,minz,maxz,h,geo,model,color} */
 const OBS=[],STAT=[];
 let sekilSayac=0;
+/* ASGARİ AÇIKLIK. Ölçümde 43 engelin 15 çifti birbirine 1.4 birimden yakındı,
+   beşinin arası tam 0.00 — üst üste binmişlerdi. Yapışık engeller içbükey cep
+   oluşturuyor ve düşmanın yönlendirmesini kilitliyor; "kayaların arkasında
+   takılma" şikâyetinin ikinci yarısı buydu. Düşman yarıçapı 0.6, rahat geçiş
+   için iki katı isteniyor. */
+const ASGARI_ACIKLIK=2.0;
+function yerUygun(x,z,w,d){
+  for(const b of OBS){
+    if(b.duvar) continue;                       /* arena seti hariç */
+    const gx=Math.max(0, Math.max((x-w/2)-b.maxx, b.minx-(x+w/2)));
+    const gz=Math.max(0, Math.max((z-d/2)-b.maxz, b.minz-(z+d/2)));
+    if(Math.hypot(gx,gz) < ASGARI_ACIKLIK) return false;
+  }
+  return true;
+}
 /* tip: 'yayla' düz tepeli kademeli blok · 'kaya' yuvarlak kaya · 'buz' kule ·
    'duz' kutu (yalnız arena seti). gorH: çizilen yükseklik ≠ çarpışma yüksekliği. */
 function addObs(x,z,w,d,h,color,tip,gorH){
-  OBS.push({minx:x-w/2,maxx:x+w/2,minz:z-d/2,maxz:z+d/2,h});
+  OBS.push({minx:x-w/2,maxx:x+w/2,minz:z-d/2,maxz:z+d/2,h,duvar:tip==='duz'});
   const P=TEMA.parilti, gh=gorH||h, s=sekilSayac++, don=(s*2.399)%6.283185;
   if(tip==='duz'){ STAT.push({geo:GEO.box,model:mModel(x,gh/2,z,0,w,gh,d),color,emiss:0,kar:1,parilti:P}); return; }
   if(tip==='buz'){
@@ -1262,19 +1278,25 @@ const KAR=[];
      Küme başına 2 parça: 7×(2-3) denendiğinde orta kuşak yoğunluğu 20.7 çıktı,
      eski oynanabilir düzenin (10.6) iki katı — mermi hiç geçmiyordu. 13 civarı
      hem siperi anlamlı bırakıyor hem düelloyu boğmuyor. */
+  /* Küme başına 2'den 1'e: kullanıcı haritayı kalabalık buldu ve ölçüm de
+     arena içinde 8 geçilemez çift gösterdi. Tek parça + asgari açıklık,
+     siperi anlamlı bırakıp koridorları açıyor. */
   for(const a0 of [0.30,1.24,2.16,3.05,4.02,5.10]){
-    const adet=2;
     const d0=9.5+rnd()*8;
-    for(let i=0;i<adet;i++){
+    for(let dene=0;dene<8;dene++){
       const a=a0+(rnd()-0.5)*0.44, d=d0+(rnd()-0.5)*5.5;
       const x=Math.cos(a)*d, z=Math.sin(a)*d;
-      const w=1.6+rnd()*1.9, h=1.0+rnd()*1.5;
-      addObs(x,z,w,w*(0.74+rnd()*0.46),h,renk(),'yayla');
+      const w=1.6+rnd()*1.9, h=1.0+rnd()*1.5, dd=w*(0.74+rnd()*0.46);
+      if(!yerUygun(x,z,w,dd)) continue;
+      addObs(x,z,w,dd,h,renk(),'yayla');
+      break;
     }
     /* kümeye eşlik eden alçak kırık taş — ölçek çıpası */
-    if(rnd()<0.6){
+    if(rnd()<0.6) for(let dene=0;dene<6;dene++){
       const a=a0+(rnd()-0.5)*0.7, d=d0+(rnd()-0.5)*7;
-      addObs(Math.cos(a)*d,Math.sin(a)*d,1.0+rnd()*0.8,1.0+rnd()*0.7,0.55+rnd()*0.4,renk(),'kaya');
+      const x=Math.cos(a)*d, z=Math.sin(a)*d, w=1.0+rnd()*0.8, dd=1.0+rnd()*0.7;
+      if(!yerUygun(x,z,w,dd)) continue;
+      addObs(x,z,w,dd,0.55+rnd()*0.4,renk(),'kaya'); break;
     }
   }
   /* --- dış kuşak: yoğun ve yüksek; sınır burada okunuyor --- */
@@ -1283,15 +1305,20 @@ const KAR=[];
     /* iki geçit bırak: oyuncu kenara sıkışıp kalmasın */
     const gecit=Math.min(Math.abs(a-1.45),Math.abs(a-4.6));
     if(gecit<0.20) continue;
-    const d=21.5+rnd()*6.5;
-    const x=Math.cos(a)*d, z=Math.sin(a)*d;
-    const h=2.6+rnd()*4.6;                     /* alçak siperin ~5 katına kadar */
-    const w=2.0+rnd()*2.2;
-    addObs(x,z,w,w*(0.78+rnd()*0.4),h,renk(),'yayla');
+    for(let dene=0;dene<6;dene++){
+      const d=21.5+rnd()*6.5;
+      const x=Math.cos(a)*d, z=Math.sin(a)*d;
+      const h=2.6+rnd()*4.6;                   /* alçak siperin ~5 katına kadar */
+      const w=2.0+rnd()*2.2, dd=w*(0.78+rnd()*0.4);
+      if(!yerUygun(x,z,w,dd)) continue;
+      addObs(x,z,w,dd,h,renk(),'yayla'); break;
+    }
   }
   /* --- buz kuleleri: üçü dışta işaret taşı, biri ortada dönüm noktası --- */
-  for(const[a,d]of [[0.75,24],[2.55,25.5],[4.05,23],[5.6,25],[1.45,13.5]])
-    addObs(Math.cos(a)*d,Math.sin(a)*d,1.5,1.5,2.4+rnd()*1.6,TEMA.silindir,'buz');
+  for(const[a,d]of [[0.75,24],[2.55,25.5],[4.05,23],[5.6,25],[1.45,13.5]]){
+    const x=Math.cos(a)*d, z=Math.sin(a)*d;
+    if(yerUygun(x,z,1.5,1.5)) addObs(x,z,1.5,1.5,2.4+rnd()*1.6,TEMA.silindir,'buz');
+  }
 }
 /* Kar gölge yamaları da statik — kaynağa dahil (26 çağrı daha eksilir) */
 for(const y of KAR)
@@ -1795,14 +1822,27 @@ function updateEnemies(dt,now){
        hiç yaklaşmıyordu; oyuncu 9 birim ötede siperin arkasındayken etrafında
        tur atıp duruyordu. Dar bant, atış menzilinde kalmaya zorluyor. */
     const yakin=e.tip==='hayalet'?5.5:3.6, uzak=e.tip==='hayalet'?9:6.5;
+    /* SİPER SÜRELİ. oyuncuHazir, oyuncu şarjlı beceriyi beklettiği SÜRECE doğru
+       kalıyor (muhur.js'te şarjın zaman aşımı yok). Sınırsız bırakılınca döngü
+       şu: siper → görüş kesilir → yaklas → görüş açılır → oyuncu hâlâ hazır →
+       siper. Düşman kayanın kenarında sonsuza kadar gidip geliyordu; şikâyet
+       edilen "arkasında takılı kalma" buydu, fiziksel sıkışma değil.
+       Artık toplam SIPER_TAVAN saniye saklanabiliyor, sonra saldırmak zorunda.
+       Süre ancak ateş ettiğinde yenileniyor. */
+    e.siperSure=e.siperSure||0;
+    const siperHakki = e.siperSever && e.siperSure < SIPER_TAVAN;
     let durum;
     if(!los) durum='yaklas';
     else if(e.cd<TELEGRAF/1000) durum='hazirlan';        /* atış yaklaştı: dur ve nişan al */
-    else if(oyuncuHazir&&e.siperSever) durum='siper';    /* oyuncu ateşe hazır: kaçış */
+    else if(oyuncuHazir&&siperHakki) durum='siper';      /* oyuncu ateşe hazır: kaçış */
     else if(d>uzak) durum='yaklas';
     else if(d<yakin) durum='uzaklas';
     else durum='dolan';
     e.durum=durum;
+    /* Saklanma süresi: siperdeyken ve siperden ötürü görüşün kapalı olduğu
+       sürede işliyor. Serbestçe yaklaşırken işlemiyor, yoksa arenanın öbür
+       ucundan gelen düşman hakkını yolda tüketirdi. */
+    if(durum==='siper'||(durum==='yaklas'&&!los&&e.siperSure>0)) e.siperSure+=dt;
 
     let mx=0,mz=0,hiz=e.sp;
     if(durum==='yaklas'){ mx=ux;mz=uz; }
@@ -1856,6 +1896,7 @@ function updateEnemies(dt,now){
       const sl=Math.hypot(sx,sy,sz2)||1;
       fire(e.x,my,e.z,sx/sl,sy/sl,sz2/sl,e.el,e.guc,e,null);
       e.cd=e.bekle*(0.85+Math.random()*0.35);
+      e.siperSure=0;                                      /* saldırdı: saklanma hakkı yenilendi */
       if(e.siperSever) e.cd=Math.max(e.cd,1.6);          /* atıştan sonra sipere çekilecek zaman */
     } else if(e.cd<=0&&!los){
       e.cd=0.35;                                          /* görüş yoksa boşuna bekleme */
@@ -1865,7 +1906,12 @@ function updateEnemies(dt,now){
        Oyuncuya kalan pay <=350 ms, ölçülmüş atış maliyeti 417-467 ms: karşılık
        yetiştirmek aritmetik olarak imkânsızdı. Görüş yeniden açıldığında tam
        telegraf garanti ediliyor. */
-    if(los && !e.sonLos) e.cd=Math.max(e.cd, TELEGRAF/1000 + 0.15);
+    /* Telegraf tazelemesi yalnız GERÇEK saklanmadan sonra. Her görüş
+       titremesinde (ağacın arkasından geçmek gibi) sıfırlanınca düşmanın atış
+       sayacı hiç dolmuyor ve ölçümde 60 sn'de 5.4 atışta kalıyordu. */
+    if(!los) e.losKayip=(e.losKayip||0)+dt; 
+    if(los && !e.sonLos && (e.losKayip||0)>0.4) e.cd=Math.max(e.cd, TELEGRAF/1000 + 0.15);
+    if(los) e.losKayip=0;
     e.sonLos=los;
   }
 }
