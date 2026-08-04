@@ -113,7 +113,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v8.0 · 30Hz algı · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v8.4 · enerji · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -215,7 +215,7 @@ const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById(
 const enBarEl=document.getElementById('enBar'), enWrapEl=document.getElementById('enWrap'), enLblEl=document.getElementById('enLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v8.0 · 30Hz algı · motor hazır ✓';
+document.getElementById('subLine').textContent='v8.4 · enerji · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -1476,17 +1476,23 @@ function canCiz(){
   const o=Math.max(0,G.can)/OY_CAN;
   hpBarEl.style.width=(o*100).toFixed(0)+'%';
   hpLblEl.textContent='CAN '+Math.max(0,Math.round(G.can));
+
+}
+/* Enerji HER KARE değişiyor, can ise yalnız hasar alınca. İkisini aynı
+   fonksiyona koymak bar'ı donduruyordu: canCiz() sadece hasarAl() ve
+   resetGame() içinden çağrılıyor, dolayısıyla enerji göstergesi hiç
+   güncellenmiyordu. Ayrı fonksiyon, çizim döngüsünden çağrılıyor. */
+function enerjiCiz(dt){
   enBarEl.style.width=(G.enerji/EN_BAR*100).toFixed(1)+'%';
   enWrapEl.classList.toggle('sarj',G.sarjEdiyor);
-  /* Etiket "kaç saldırı kaldı"yı söylüyor; şarj sırasında eşiğin geri sayımı,
-     düğme olmadığı için oyuncunun tek geri bildirimi. */
   const tam=Math.floor(G.enerji+1e-6);
   enLblEl.textContent = G.sarjEdiyor ? 'ŞARJ '+tam+'/'+EN_BAR
-    : (G.durgun>0.05&&G.enerji<EN_BAR ? 'DUR… '+(EN_ESIK-G.durgun).toFixed(1)+'s'
+    : (G.durgun>0.05&&G.enerji<EN_BAR ? 'DUR… '+Math.max(0,EN_ESIK-G.durgun).toFixed(1)+'s'
       : 'ENERJİ '+tam+'/'+EN_BAR);
-  if(G.enerjiUyari>0){ G.enerjiUyari-=RDT; enWrapEl.classList.add('yetmez'); }
+  if(G.enerjiUyari>0){ G.enerjiUyari-=dt; enWrapEl.classList.add('yetmez'); }
   else enWrapEl.classList.remove('yetmez');
 }
+
 
 addEventListener('contextmenu',e=>e.preventDefault());
 /* --- giriş çekirdeği --- */
@@ -2422,6 +2428,7 @@ function tick(){
   }
   render(now);
   drawOverlay(now);
+  if(G.running) enerjiCiz(dt);
 }
 tick();
 </script>
