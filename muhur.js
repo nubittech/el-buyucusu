@@ -194,18 +194,19 @@ const KAT={Temel:1.0,'Güçlendirilmiş':1.6,'Beslenmiş':1.6,'Füzyon':1.5,'Zin
 
 function beceriBul(dz){
   const n=dz.length;
-  if(n===1) return {ad:TEMEL[dz[0]],tur:'Temel',ms:YUKLEME[1],el:dz[0],kat:KAT.Temel};
+  /* maliyet = zincir uzunluğu (birim). Kombo daha pahalı; TASARIM.md 5b. */
+  if(n===1) return {ad:TEMEL[dz[0]],tur:'Temel',ms:YUKLEME[1],el:dz[0],kat:KAT.Temel,maliyet:1};
   if(n===2){
     const [a,b]=dz;
-    if(a===b)          return {ad:GUCLU[a], tur:'Güçlendirilmiş',ms:YUKLEME[2],el:a,kat:KAT['Güçlendirilmiş']};
-    if(YENER[a]===b)   return {ad:BESLI[a], tur:'Beslenmiş',     ms:YUKLEME[2],el:a,kat:KAT['Beslenmiş']};
-    if(YENILIR[a]===b) return {ad:FUZYON[a],tur:'Füzyon',        ms:YUKLEME[2],el:a,kat:KAT['Füzyon']};
+    if(a===b)          return {ad:GUCLU[a], tur:'Güçlendirilmiş',ms:YUKLEME[2],el:a,kat:KAT['Güçlendirilmiş'],maliyet:2};
+    if(YENER[a]===b)   return {ad:BESLI[a], tur:'Beslenmiş',     ms:YUKLEME[2],el:a,kat:KAT['Beslenmiş'],maliyet:2};
+    if(YENILIR[a]===b) return {ad:FUZYON[a],tur:'Füzyon',        ms:YUKLEME[2],el:a,kat:KAT['Füzyon'],maliyet:2};
     return null;                                  /* nötr çiftler rezerve */
   }
   if(n===3){
     const [a,b,c]=dz;
     if(YENER[a]===b&&YENER[b]===c)
-      return {ad:ZINCIR[a],tur:'Zincirleme üstünlük',ms:YUKLEME[3],el:a,kat:KAT['Zincirleme üstünlük']};
+      return {ad:ZINCIR[a],tur:'Zincirleme üstünlük',ms:YUKLEME[3],el:a,kat:KAT['Zincirleme üstünlük'],maliyet:3};
     return null;
   }
   return null;
