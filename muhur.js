@@ -56,11 +56,16 @@ const OY_MS=260, OY_PAY=0.55, OY_ASGARI=5;
    beceri tablosunda aranır ve yüklenir. Kapalıyken: tek mühür beceriyi doğrudan
    şarj eder, 👉 yalnız ateşler, ateşleyince şarj sıfırlanır. Kombo mantığı
    silinmedi — beceriBul ve dizi motoru duruyor, yalnız bu bayrakla atlanıyor. */
-let KOMBO=false;
+let KOMBO=true;   /* AÇIK: dizi mühürleri, silah diziyi kapatır */
 const komboAyar=v=>{KOMBO=!!v;};
 const KILIT_MS=150;   /* göstergelerde ilerleme çubuğu için korunuyor */
 const DIZI_MS=900;    /* mühürler arası zaman aşımı */
 const CEZA_MS=400;    /* eşleşmeyen dizi cezası */
+/* Aynı mührü ARDIŞIK kullanmak için el bu kadar süre onaysız kalmalı.
+   Tanıma kesintisi tipik olarak 1-3 kare (33-100 ms) sürüyor; kasıtlı tekrar
+   ise eli açıp yeniden kurmayı gerektiriyor, o da bunun çok üstünde. Bu eşik
+   olmadan a===b komboları (Güçlendirilmiş, 5 beceri) hiç ulaşılamıyordu. */
+const TEKRAR_MS=300;
 const KAL_ANAHTAR='muhurProto';
 
 let PROTO=JSON.parse(JSON.stringify(PROTO0));
@@ -192,6 +197,14 @@ const ZINCIR={fire:'Yanan Gökyüzü',air:'Fırtına Kıyameti',bolt:'Yeraltı S
 const YUKLEME=[0,250,700,1200];
 const KAT={Temel:1.0,'Güçlendirilmiş':1.6,'Beslenmiş':1.6,'Füzyon':1.5,'Zincirleme üstünlük':2.6};
 
+/* ELLE TASARLANAN KOMBOLAR — nötr çiftlerin doldurduğu yuvalar.
+   tip:'alan' → mermi değil, yere düşen gecikmeli vuruş. Hedef, DÖKÜM ANINDAKİ
+   konuma kilitleniyor: takip etseydi kaçınılmaz olurdu ve rakibin hareketi
+   anlamsızlaşırdı. Gecikme, kaçma penceresi. */
+const ELLE={
+  'fire+bolt':{ad:'Gök Ateşi', tur:'Alan', kat:2.0, tip:'alan',
+               gecikme:1.0, yaricap:2.6},
+};
 function beceriBul(dz){
   const n=dz.length;
   /* maliyet = zincir uzunluğu (birim). Kombo daha pahalı; TASARIM.md 5b. */
@@ -201,7 +214,13 @@ function beceriBul(dz){
     if(a===b)          return {ad:GUCLU[a], tur:'Güçlendirilmiş',ms:YUKLEME[2],el:a,kat:KAT['Güçlendirilmiş'],maliyet:2};
     if(YENER[a]===b)   return {ad:BESLI[a], tur:'Beslenmiş',     ms:YUKLEME[2],el:a,kat:KAT['Beslenmiş'],maliyet:2};
     if(YENILIR[a]===b) return {ad:FUZYON[a],tur:'Füzyon',        ms:YUKLEME[2],el:a,kat:KAT['Füzyon'],maliyet:2};
-    return null;                                  /* nötr çiftler rezerve */
+    /* NÖTR ÇİFTLER artık elle tasarlanan becerilere açılıyor. Kural tabanlı
+       üçlü (aynı/yener/yenilir) hasar ölçeği veriyordu; bunlar ETKİ veriyor.
+       TASARIM.md 5b: kombo hasar başına daha pahalı, yerini etkiyle
+       kazanmak zorunda — mermi değil, alan reddi. */
+    const el=ELLE[a+'+'+b];
+    if(el) return {...el, ms:YUKLEME[2], el:a, maliyet:2};
+    return null;                                  /* kalan nötr çiftler rezerve */
   }
   if(n===3){
     const [a,b,c]=dz;
@@ -323,17 +342,20 @@ function guncelle(D,id,dt,now,yeniOrnek){
       diziSifirla(D);D.beceri=null;D.yukMs=0;D.cezaUntil=now+CEZA_MS;
       D.son='dizi en fazla 3 mühür';
       olaylar.push({tip:'basarisiz',sebep:D.son});
-    } else if(D.dizi.length&&D.dizi[D.dizi.length-1]===onayli){
-      /* Aynı mührün ardışık tekrarı YOK. El sabit dururken tanıma bir an
-         kesilip yeniden kilitlenince aynı mühür ikinci kez ekleniyordu; dizi
-         🔥🔥🔥 olup hiçbir beceriye karşılık gelmiyor, 👉 de "eşleşme yok"
-         veriyordu. Tekrar bastırılıyor, süre de tazeleniyor. */
+    } else if(D.dizi.length&&D.dizi[D.dizi.length-1]===onayli&&
+              (now-(D.bosBasla||0))<TEKRAR_MS){
+      /* İSTEMSİZ tekrar: el sabit dururken tanıma bir an kesilip yeniden
+         kilitleniyor, aynı mühür ikinci kez ekleniyordu; dizi 🔥🔥🔥 olup
+         hiçbir beceriye karşılık gelmiyordu. Kısa boşluk = kesinti, bastır.
+         Uzun boşluk = oyuncu eli açıp yeniden kurdu, kasıtlı: geçir. */
       D.sonMuhur=now;
     } else {
       D.dizi.push(onayli);D.sonMuhur=now;D.beceri=null;D.yukMs=0;D.son=null;
       olaylar.push({tip:'muhur',id:onayli});
     }
   }
+  /* Onaysız geçen sürenin başlangıcı — kasıtlı tekrarı kesintiden ayırmak için */
+  if(onayli) D.bosBasla=now; else if(D.onayli) D.bosBasla=now;
   D.onayli=onayli;
 
   /* Zaman aşımı mühürler ARASI tereddüt içindir, pozu tutma süresi için değil:
@@ -345,7 +367,14 @@ function guncelle(D,id,dt,now,yeniOrnek){
   }
   if(D.beceri&&D.yukMs<D.yukTotal){
     D.yukMs=Math.min(D.yukTotal,D.yukMs+dt);
-    if(D.yukMs>=D.yukTotal) olaylar.push({tip:'yuklendi',beceri:D.beceri});
+    if(D.yukMs>=D.yukTotal){
+      /* KOMBO modunda şarj dolunca beceri KENDİLİĞİNDEN çıkar. Silah zaten
+         diziyi kapatmak için kullanıldı; ikinci bir tetik istemek eli bozup
+         tekrar silah yapmayı gerektirirdi. Şarj süresi zaten risk penceresi. */
+      olaylar.push({tip:'yuklendi',beceri:D.beceri});
+      olaylar.push({tip:'ates',beceri:D.beceri});
+      D.beceri=null;D.yukMs=0;D.yukTotal=0;D.dizi=[];D.son=null;
+    }
   }
   return olaylar;
 }
