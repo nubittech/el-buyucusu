@@ -7,7 +7,8 @@ const kok=path.join(__dirname,'..'), hedef=path.join(kok,'www');
 
 const DOSYALAR=['index.html','muhur.html','muhur.js','wkwebview-test.html'];
 const KLASORLER=['mediapipe'];
-const SECMELI=['assets/karakter.json'];   /* varsa kopyala, yoksa sorun değil */
+const SECMELI=['assets/karakter.json','assets/binalar.json',
+               'assets/zemin1.webp','assets/zemin2.webp'];      /* varsa kopyala */
 
 function kopyalaKlasor(src,dst){
   fs.mkdirSync(dst,{recursive:true});

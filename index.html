@@ -325,6 +325,15 @@ uniform float uKar;        /* bu nesne ne kadar kar tutar (0 hiç, 1 tamamen) */
 uniform vec3 uKarRenk;
 uniform float uParilti;    /* kar kristali kıvılcımı */
 uniform float uDoku;       /* yüzeyin fırça payı: kaya 1, kar düşük */
+/* ZEMİN DOKUSU — yalnız zemin çiziminde açık (uZeminGuc).
+   UV yok, dünya XZ'sinden örnekleniyor: zemin düz olduğu için üçdüzlemliye
+   gerek kalmıyor ve döşeme kendiliğinden tekrar ediyor.
+   İki doku var ve seçimi IZGARA yapıyor: sokak bandındaysak taş döşeme,
+   blok içindeysek avlu toprağı. Böylece düzen zeminden de okunuyor —
+   oyuncu binaların arasına girdiğini ayağının altından anlıyor. */
+uniform sampler2D uZeminA, uZeminB;
+uniform float uZeminGuc, uZeminOlcek;
+uniform vec3 uIzgara;      /* .x başlangıç, .y adım (blok+sokak), .z sokak genişliği */
 /* GUAJ GÖRÜNÜMÜ — doku yok, üç şeyle yapılıyor:
    1) BANTLAMA: sürekli gradyan yerine üç ton kademesi. Suluboya/guaj resimlerde
       ton grupları düz durur, aradaki geçiş dardır.
@@ -368,7 +377,22 @@ void main(){
   vec3 isik=mix(uCool,uWarm,b);                 /* gölge soğuk, ışık sıcak */
   /* Taban 0.62 → 0.72: karlı sahnede gölge SİYAH değil, ay ışığını yansıtan
      açık mavi. Karartmayı yalnız bu terim yapıyor, renk kaydırması ayrı. */
-  vec3 col=uColor*(0.70+0.46*b)*isik;
+  /* Doku uColor'ın YERİNE geçiyor, üstüne değil: bantlama, sıcak-soğuk kayması
+     ve sis olduğu gibi kalsın diye taban rengi değiştiriliyor. */
+  vec3 taban=uColor;
+  if(uZeminGuc>0.001){
+    vec2 uv=vW.xz*uZeminOlcek;
+    vec3 sokak=texture2D(uZeminA,uv).rgb;
+    vec3 avlu =texture2D(uZeminB,uv*0.79).rgb;
+    vec2 g=mod(vW.xz-uIzgara.x+uIzgara.z*0.5, uIzgara.y);
+    /* Sokak bandı X'te VEYA Z'de. Kenar sert değil: fırça değeriyle bozulan
+       dar bir geçiş, döşemenin toprağa karıştığı gerçek bir kenar gibi. */
+    float kx=1.0-smoothstep(uIzgara.z*0.72,uIzgara.z*1.05,abs(g.x-uIzgara.z*0.5)*2.0);
+    float kz=1.0-smoothstep(uIzgara.z*0.72,uIzgara.z*1.05,abs(g.y-uIzgara.z*0.5)*2.0);
+    float s=clamp(max(kx,kz)+(f2-0.5)*0.35,0.0,1.0);
+    taban=mix(uColor, mix(avlu,sokak,s), uZeminGuc);
+  }
+  vec3 col=taban*(0.70+0.46*b)*isik;
   /* Fırçanın yüzeydeki payı ÖLÇÜLEREK ayarlandı: dokunun std sapması 0.147,
      eski 0.28 katsayısıyla parlaklık yalnız ±%3 oynuyordu — görünmüyordu.
      0.54 ile 1σ'da ±%6, uçtan uca ±%27: darbe okunuyor ama gürültüye
@@ -408,7 +432,8 @@ void main(){
   gl_FragColor=vec4(col,uAlpha);
 }`;
 const SAHNE_U=['uM','uV','uPr','uColor','uEmiss','uAlpha','uCam','uFogCol','uFogR','uLight',
-               'uWarm','uCool','uFirca','uFircaOlcek','uKar','uKarRenk','uParilti','uDoku'];
+               'uWarm','uCool','uFirca','uFircaOlcek','uKar','uKarRenk','uParilti','uDoku',
+               'uZeminA','uZeminB','uZeminGuc','uZeminOlcek','uIzgara'];
 const prog=GL.createProgram();
 GL.attachShader(prog,sh(GL.VERTEX_SHADER,`
 attribute vec3 aP; attribute vec3 aN;
@@ -444,6 +469,8 @@ function sahneSabitleri(u){
      ışıkta zemin bant kenarına oturuyor ve darbeler ton sınırını dalgalandırıyor. */
   const l=TEMA.gunes,ll=Math.hypot(...l);GL.uniform3f(u.uLight,l[0]/ll,l[1]/ll,l[2]/ll);
   GL.uniform1i(u.uFirca,3);
+  GL.uniform1i(u.uZeminA,4); GL.uniform1i(u.uZeminB,5);
+  GL.uniform1f(u.uZeminGuc,0); GL.uniform1f(u.uZeminOlcek,0.085);
   /* Ölçekler KABALAŞTIRILDI. 0.42 ince katmanı 2.4 birimde bir tekrarlıyordu;
      doku gerçekten bağlanınca bu zeminde parazit gibi çıktı. 0.17 → 5.9
      birim: fırça darbesi okunuyor, benek olmuyor. */
@@ -468,6 +495,37 @@ function sahneSabitleri(u){
   GL.activeTexture(GL.TEXTURE3);GL.bindTexture(GL.TEXTURE_2D,tex);
   GL.activeTexture(GL.TEXTURE0);            /* 0'ı çalışma birimi olarak bırak */
 }
+/* --- ZEMİN DOKULARI (4 ve 5. birim) ------------------------------------------
+   WebP: 1254² PNG'ler 2.1 MB'tı, kırpılıp 512'ye indirilip WebP'ye çevrilince
+   23 KB. Kaynak swatch'lar döşenmiyordu (kenarda koyu çerçeve + dikiş);
+   çerçeve kırpıldı ve %50 kaydırılmış kopya yumuşak maskeyle bindirilerek
+   dikiş çapraz geçişe çevrildi (bkz. tools/ ile üretim komutu, TASARIM.md).
+   Yükleme asenkron; gelene kadar 1×1 gri duruyor ki örnekleme siyah dönmesin. */
+function zeminDoku(birim,yol){
+  const t=GL.createTexture();
+  GL.activeTexture(GL.TEXTURE0+birim); GL.bindTexture(GL.TEXTURE_2D,t);
+  GL.texImage2D(GL.TEXTURE_2D,0,GL.RGBA,1,1,0,GL.RGBA,GL.UNSIGNED_BYTE,
+                new Uint8Array([150,146,138,255]));
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_WRAP_S,GL.REPEAT);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_WRAP_T,GL.REPEAT);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MIN_FILTER,GL.LINEAR);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MAG_FILTER,GL.LINEAR);
+  const im=new Image();
+  im.onload=()=>{
+    GL.activeTexture(GL.TEXTURE0+birim); GL.bindTexture(GL.TEXTURE_2D,t);
+    GL.pixelStorei(GL.UNPACK_FLIP_Y_WEBGL,false);
+    GL.texImage2D(GL.TEXTURE_2D,0,GL.RGBA,GL.RGBA,GL.UNSIGNED_BYTE,im);
+    GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MIN_FILTER,GL.LINEAR_MIPMAP_LINEAR);
+    GL.generateMipmap(GL.TEXTURE_2D);
+    GL.activeTexture(GL.TEXTURE0);
+    console.log(`zemin dokusu ${yol} ${im.width}×${im.height} → birim ${birim}`);
+  };
+  im.onerror=()=>console.warn('zemin dokusu yüklenemedi: '+yol);
+  im.src=yol;
+  GL.activeTexture(GL.TEXTURE0);
+}
+zeminDoku(4,'assets/zemin2.webp');   /* sokak: sık taş döşeme */
+zeminDoku(5,'assets/zemin1.webp');   /* avlu: toprak üstü dağınık taş */
 sahneSabitleri(U);
 
 /* =============================================================
@@ -1250,7 +1308,11 @@ function draw(geo,model,color,emiss,alpha,kar,parilti,doku){
 /* =============================================================
    BÖLÜM 2 — OYUN
    ============================================================= */
-const AR=30; /* arena yarı-boyu */
+/* HARİTA SEÇİMİ. 'kar' eski açık arena, 'kasaba' sokaklı köy. Eskisi silinmedi:
+   yeni düzenin YZ ve kamera davranışı ölçülene kadar geri dönebilecek bir
+   karşılaştırma noktası lazım. */
+const HARITA='kasaba';
+const AR = HARITA==='kasaba' ? 44 : 30;   /* arena yarı-boyu */
 const MU=window.MUHUR;                       /* paylaşılan mühür/element katmanı */
 const EL_IDS=Object.keys(MU.ELEM);
 const OY_CAN=100, EN_CAN=100;                /* düello birkaç doğru okuma sürsün */
@@ -1331,6 +1393,7 @@ addObs(-AR-1,0,2.6,AR*2+4,2.6,TEMA.duvar,'duz',0.85);
 addObs( AR+1,0,2.6,AR*2+4,2.6,TEMA.duvar,'duz',0.85);
 /* Kar gölgesi yamaları — deterministik, zemine değer katıyor */
 const KAR=[];
+if(HARITA==='kar')
 { let r=12345; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
   for(let i=0;i<26;i++){
     const a=rnd()*6.283, d=3+rnd()*(AR-5);
@@ -1342,6 +1405,7 @@ const KAR=[];
    iş siluet: koni yığını çam okunuyor, silindir direk okunuyordu. Kuşak
    uzaklaştıkça ağaç seyrekleşip küçülüyor ve rengi pusa yaklaşıyor — orman
    kenarı tek bir duvar gibi durmasın, derinliğe dağılsın. */
+if(HARITA==='kar')
 { let r=777; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
   const KUSAK=[[AR+1.5, 7, 54, 1.00],[AR+9, 16, 46, 0.86],[AR+26, 34, 30, 0.68]];
   for(const[ic,genis,adet,olcekK]of KUSAK){
@@ -1370,6 +1434,7 @@ const KAR=[];
      dış     21–29   yoğun + yüksek → sınırı çit değil kaya sıklığı okutuyor
    Kümeler açı listesiyle yerleştiriliyor; listedeki boşluklar koridor oluyor.
    ============================================================= */
+if(HARITA==='kar')
 { let r=4242; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
   const renk=()=>rnd()<0.5?TEMA.engelA:TEMA.engelB;
   /* --- orta kuşak: 6 küme, aralarında geçit ---
@@ -1418,6 +1483,91 @@ const KAR=[];
     if(yerUygun(x,z,1.5,1.5)) addObs(x,z,1.5,1.5,2.4+rnd()*1.6,TEMA.silindir,'buz');
   }
 }
+/* =============================================================
+   KASABA DÜZENİ — sokaklar, bloklar, çıkmazlar
+
+   IZGARA: blok 13.5, sokak 7.0. 4 blok + 5 sokak = 89 ≈ arena 88.
+   Sokak genişliği keyfi değil: oyuncu 0.55 yarıçapında, düşman 0.6, ve omuz
+   üstü kamera 5.4 birim geriden bakıyor. 5 birimlik sokakta kamera duvarın
+   içine giriyordu (kamera çarpışması onu öne çekiyor ama o zaman da karakter
+   ekranı dolduruyor). 7 birim ikisine de yer bırakıyor.
+
+   BİNALAR blok kenarlarına, cepheleri sokağa BAKACAK şekilde diziliyor.
+   Yerleşim OBS'ye hemen giriyor (çarpışma ve YZ ilk kareden itibaren doğru),
+   çizim ise binalar.json gelince kaynatılıyor — varlık yüklemesi asenkron ama
+   harita mantığı beklememeli.
+
+   ÇIKMAZLAR: ızgaranın bazı sokak parçaları binayla kapatılıyor. Tamamen
+   rastgele kapatmak adayı ikiye bölebiliyor; kapatılan parça hep IZGARANIN
+   KENARINDAN içeri bir adım oluyor, yani çıkmaz oluşuyor ama ana ağ bağlı
+   kalıyor. Bağlantı ayrıca ölçülüyor (tools/kasaba.js). */
+const BINA_YER=[];      /* {tip, x, z, yaw, olcek} — binalar.json gelince çizilecek */
+/* Izgara zemin shader'ına da gidiyor: sokak taşı ile avlu toprağını ayıran
+   maske aynı sayılardan hesaplanıyor, yoksa döşeme binalarla hizasız kalır. */
+let IZGARA=[0,1,0];
+if(HARITA==='kasaba'){
+  let r=90210; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
+  const BLOK=13.5, SOKAK=7.0, ADIM=BLOK+SOKAK;
+  const N=4;                                  /* blok sayısı (kenar başına) */
+  const BAS=-(N*BLOK+(N+1)*SOKAK)/2 + SOKAK;  /* ilk bloğun sol-üst köşesi */
+  IZGARA=[BAS,ADIM,SOKAK];
+  /* Bina ölçekleri: modeller 1.9'luk kutuda geliyor, karakter 1.85.
+     Bir dükkân kapısı karakterden yüksek olmalı — iki katlı ev ~6.2 birim. */
+  const OLCEK={0:6.2/1.90, 1:6.2/1.90, 2:5.6/0.95};   /* bina3 alçak ve uzun */
+  const AYAK={0:[1.59,1.25], 1:[1.45,1.31], 2:[1.90,0.70]};
+  function binaKoy(tip,x,z,yaw){
+    const s=OLCEK[tip], [w0,d0]=AYAK[tip];
+    let w=w0*s, d=d0*s;
+    if(Math.abs(Math.cos(yaw))<0.5){ const t=w; w=d; d=t; }   /* 90° dönükse eksen takas */
+    /* Çarpışma kutusu cepheden biraz DAR: saçak ve fener kolu dışarı taşıyor,
+       onları da katarsak oyuncu duvara değmeden takılıyor. */
+    OBS.push({minx:x-w*0.44,maxx:x+w*0.44,minz:z-d*0.44,maxz:z+d*0.44,h:6.2,duvar:false});
+    BINA_YER.push({tip,x,z,yaw,olcek:s});
+  }
+  /* --- blok kenarlarına cephe diz --- */
+  for(let bi=0;bi<N;bi++) for(let bj=0;bj<N;bj++){
+    const x0=BAS+bi*ADIM, z0=BAS+bj*ADIM;      /* bloğun sol-üst köşesi */
+    const mx=x0+BLOK/2, mz=z0+BLOK/2;
+    /* Dört kenar: her kenara 1 uzun sıra (bina3) ya da 2 ev.
+       Kenar seçimi bloktan bloğa değişsin ki cepheler tekrarlı durmasın. */
+    const kenarlar=[
+      {yaw:0,          cx:mx,        cz:z0-0.3,      uzun:'x'},
+      {yaw:Math.PI,    cx:mx,        cz:z0+BLOK+0.3, uzun:'x'},
+      {yaw:Math.PI/2,  cx:x0-0.3,    cz:mz,          uzun:'z'},
+      {yaw:-Math.PI/2, cx:x0+BLOK+0.3,cz:mz,         uzun:'z'},
+    ];
+    for(const k of kenarlar){
+      if(rnd()<0.34){                          /* uzun dükkân sırası */
+        binaKoy(2,k.cx,k.cz,k.yaw);
+      } else {                                 /* iki ayrı ev */
+        const ofs=BLOK*0.26;
+        for(const yon of [-1,1]){
+          const x=k.uzun==='x'?k.cx+yon*ofs:k.cx;
+          const z=k.uzun==='x'?k.cz:k.cz+yon*ofs;
+          if(rnd()<0.16) continue;             /* ara sıra boşluk: avlu girişi */
+          binaKoy(rnd()<0.5?0:1, x, z, k.yaw);
+        }
+      }
+    }
+  }
+  /* --- ÇIKMAZLAR: kenardaki sokak ağızlarını kapat --- */
+  const agiz=[];
+  for(let i=0;i<=N;i++){
+    const s=BAS-SOKAK/2+i*ADIM;                /* i. sokağın orta ekseni */
+    agiz.push({x:s, z:BAS-SOKAK/2, yaw:0},
+              {x:s, z:BAS-SOKAK/2+N*ADIM, yaw:Math.PI},
+              {x:BAS-SOKAK/2, z:s, yaw:Math.PI/2},
+              {x:BAS-SOKAK/2+N*ADIM, z:s, yaw:-Math.PI/2});
+  }
+  let kapali=0;
+  for(const a of agiz){
+    if(kapali>=6) break;
+    if(rnd()>0.30) continue;
+    if(Math.hypot(a.x,a.z)<ADIM) continue;     /* merkezi tıkama */
+    binaKoy(2,a.x,a.z,a.yaw); kapali++;
+  }
+  console.log(`KASABA: ${BINA_YER.length} bina, ${kapali} çıkmaz, arena ${AR*2}×${AR*2}`);
+}
 /* Kar gölge yamaları da statik — kaynağa dahil (26 çağrı daha eksilir) */
 for(const y of KAR)
   STAT.push({geo:GEO.disc,model:mModel(y[0],0.028,y[1],y[3],y[2],1,y[2]*0.72),
@@ -1425,6 +1575,33 @@ for(const y of KAR)
 /* Dekor tamamlandı — renk başına tek meshe kaynat. Bundan sonra STAT'a
    ekleme yapılırsa DEKOR'a yansımaz; sahne kurulumu burada bitiyor. */
 const DEKOR=birlestir(STAT);
+
+/* Binalar ASENKRON geliyor ama harita mantığı beklemiyor: OBS kutuları yukarıda
+   kuruldu, yani çarpışma ve YZ ilk kareden itibaren doğru. Dosya gelince kopya
+   başına dönüşüm pişirilip renk başına tek meshe kaynatılıyor — 40 bina × 7
+   bölge = 280 çizim yerine bir avuç.
+   birlestir yalnız CPU dizilerini (p/n/i) okuyor, o yüzden kaynak geometriler
+   için GPU tamponu açmaya gerek yok. */
+let BINA_DEKOR=null;
+if(HARITA==='kasaba') fetch('assets/binalar.json').then(r=>r.ok?r.json():null).then(j=>{
+  if(!j||!j.bina) return;
+  const yig=[];
+  for(const y of BINA_YER){
+    const b=j.bina[y.tip]; if(!b) continue;
+    /* Modeller kendi kutularında merkezlenmemiş: taban y=0'da ama x/z merkezi
+       kayabiliyor. Önce merkezi orijine taşı, sonra ölçekle ve döndür. */
+    const m=M(mT(y.x,0,y.z), mRy(y.yaw), mS(y.olcek,y.olcek,y.olcek),
+              mT(-b.merkez[0], -b.merkez[1], -b.merkez[2]));
+    for(const bl of b.bolge){
+      if(!bl.__geo) bl.__geo={p:bl.p,n:bl.n,i:bl.i};
+      yig.push({geo:bl.__geo, model:m, color:parseInt(bl.renk.slice(1),16),
+                emiss:bl.isik?0.9:0, kar:0, parilti:0, doku:0.55});
+    }
+  }
+  BINA_DEKOR=birlestir(yig);
+  console.log(`BİNA: ${BINA_YER.length} kopya → ${BINA_DEKOR.length} çizim, `
+    +`${BINA_DEKOR.reduce((s,d)=>s+d.geo.count/3,0)} üçgen`);
+}).catch(e=>console.warn('binalar.json yüklenemedi',e));
 
 /* --- çarpışma yardımcıları --- */
 function pushOut(o,r){
@@ -2585,10 +2762,20 @@ function render(now){
   GL.uniform3f(U.uCam,camX,camY,camZ);
   GL.disable(GL.BLEND);GL.depthMask(true);
   /* kar zemini: arena içi düz, dışarısı tümsekli, 150 birime kadar uzanıyor */
-  draw(GEO.zemin,mModel(0,-0.02,0,0,1,1,1),TEMA.zemin,0,1,0,TEMA.parilti,0.30);
+  /* Zemin dokusu YALNIZ burada açık: uZeminGuc bir sonraki çizimlere sızarsa
+     binalar da taş döşeme örneklemeye başlıyor. */
+  if(HARITA==='kasaba'){
+    GL.uniform1f(U.uZeminGuc,1);
+    GL.uniform3f(U.uIzgara,IZGARA[0],IZGARA[1],IZGARA[2]);
+  }
+  draw(GEO.zemin,mModel(0,-0.02,0,0,1,1,1),
+       HARITA==='kasaba'?0xffffff:TEMA.zemin,0,1,
+       HARITA==='kasaba'?0:1, HARITA==='kasaba'?0.06:TEMA.parilti, 0.30);
+  if(HARITA==='kasaba') GL.uniform1f(U.uZeminGuc,0);
   /* Kar gölge lekeleri artık DEKOR içinde (kaynatıldı).
      engeller + çevre + lekeler: kaynatılmış, renk başına tek çağrı */
   for(const s of DEKOR) draw(s.geo,s.model,s.color,s.emiss,1,s.kar,s.parilti,s.doku);
+  if(BINA_DEKOR) for(const s of BINA_DEKOR) draw(s.geo,s.model,s.color,s.emiss,1,s.kar,s.parilti,s.doku);
   /* karakterler */
   drawWizard(now,RDT);
   drawEnemies(now);
