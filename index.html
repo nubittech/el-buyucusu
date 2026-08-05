@@ -445,11 +445,15 @@ void main(){
     vec3 avlu =texture2D(uZeminB,uv*0.79).rgb;
     vec2 g=mod(vW.xz-uIzgara.x+uIzgara.z*0.5, uIzgara.y);
     /* Sokak bandı X'te VEYA Z'de. Kenar sert değil: fırça değeriyle bozulan
-       dar bir geçiş, döşemenin toprağa karıştığı gerçek bir kenar gibi. */
+       dar bir geçiş, döşemenin aşındığı gerçek bir kenar gibi. */
     float kx=1.0-smoothstep(uIzgara.z*0.72,uIzgara.z*1.05,abs(g.x-uIzgara.z*0.5)*2.0);
     float kz=1.0-smoothstep(uIzgara.z*0.72,uIzgara.z*1.05,abs(g.y-uIzgara.z*0.5)*2.0);
     float s=clamp(max(kx,kz)+(f2-0.5)*0.35,0.0,1.0);
-    taban=mix(uColor, mix(avlu,sokak,s), uZeminGuc);
+    /* REFERANSTA TOPRAK YOK — her yer taş döşeme. Blok içleri de döşeli,
+       yalnız aşınma farkı var. Toprak dokusu bu yüzden ayrı bir zemin değil,
+       düşük paylı bir AŞINMA katmanı: 0.72'de bile döşeme baskın kalıyor. */
+    float asinma=mix(0.28,0.0,s);
+    taban=mix(uColor, mix(sokak,avlu,asinma), uZeminGuc);
   }
   vec3 col=taban*(uTon.x+uTon.y*b)*isik;
   /* Fırçanın yüzeydeki payı ÖLÇÜLEREK ayarlandı: dokunun std sapması 0.147,
@@ -1446,7 +1450,13 @@ function draw(geo,model,color,emiss,alpha,kar,parilti,doku){
 /* HARITA yukarıda, tema seçiminden önce tanımlı (tema ona bağlı).
    Eski kar arenası silinmedi: yeni düzenin YZ ve kamera davranışı ölçülene
    kadar geri dönebilecek bir karşılaştırma noktası lazım. */
-const AR = HARITA==='kasaba' ? 44 : 30;   /* arena yarı-boyu */
+/* ARENA YARI-BOYU. Kasaba 44'ten 32'ye indi ve sebebi sis menzili:
+   sisMenzil[1]=58, yani ondan uzaktaki hiçbir şey görünmüyor. 88×88'de
+   köşeler merkeze 62 birim uzakta kalıyordu — mekân bir avlu gibi değil,
+   ucu görünmeyen bir ızgara gibi okunuyordu. 64×64'te köşe 45; referanstaki
+   gibi surun karşı kenarı meydandan seçiliyor ve kenardan kenara koşu
+   13.8 sn'den 10.0 sn'ye iniyor. */
+const AR = HARITA==='kasaba' ? 32 : 30;   /* arena yarı-boyu */
 const MU=window.MUHUR;                       /* paylaşılan mühür/element katmanı */
 const EL_IDS=Object.keys(MU.ELEM);
 const OY_CAN=100, EN_CAN=100;                /* düello birkaç doğru okuma sürsün */
@@ -1467,11 +1477,21 @@ const SIPER_TAVAN=1.2;   /* düşman en çok bu kadar saniye saklanabilir, sonra
    Yani 12 birimlik kilit tam da o %11'lik uzun cadde durumunu yakalıyor ve
    caddenin dibindeki düşmanı kameraya çevirip ele veriyordu.
    ATAK_MENZIL, düşmanın kendi dövüş bandının (3.6-7.5) hemen üstünde.
-   MERMİ ATAK_BIRAK kadar uçuyor, kilit ise ATAK_MENZIL'de kuruluyor: aradaki
+   MERMİ MERMI_MENZIL kadar uçuyor, kilit ise ATAK_MENZIL'de kuruluyor: aradaki
    pay sayesinde menzilin ucunda kurulmuş bir kilidin mermisi, hedef yarım adım
-   geri çekilse bile ona YETİŞİYOR. Kilit varsa vuruş var. */
-const ATAK_MENZIL=8;     /* kilit bu mesafede kurulur; düşman da ancak buradan ateş eder */
-const ATAK_BIRAK=10;     /* kilit burada kopar — mermi de tam bu kadar uçup söner */
+   geri çekilse bile ona YETİŞİYOR. Kilit varsa vuruş var.
+
+   KİLİDİN KURULMASI İLE AYAKTA KALMASI AYRI ŞEYLER. İkisi aynı şarta bağlıyken
+   kilit boşa düşüyordu: kasabada dövüş zaten binaların arasında geçiyor, düşman
+   köşeyi her dönüşünde atış hattı kapanıyor ve kilit kopuyordu. Kurulma dar
+   (menzil + açık hat + kameranın önü) — çünkü asıl mesele düşmanın yerini
+   bedavaya vermemek, o da yalnız İLK kilitte önemli. Ayakta kalması ise geniş:
+   bir kez kilitlendikten sonra tek şart AYNI ALANDA olmak. Arasına bina girse
+   de, oyuncu sırtını dönse de kilit sürüyor; ancak KILIT_KOPMA'yı aşınca
+   kopuyor ve serbest koşuya dönülüyor. */
+const ATAK_MENZIL=8;     /* kilit bu mesafede KURULUR; düşman da ancak buradan ateş eder */
+const MERMI_MENZIL=10;   /* mermi tam bu kadar uçup söner */
+const KILIT_KOPMA=16;    /* kilit ancak bu mesafede kopar — "aynı alan" bu kadar geniş */
 const HUD_MENZIL=12;     /* düşmanın baş üstü canı/elementi bu mesafeden sonra görünmez */
 /* =============================================================
    ENERJİ — TASARIM.md §5b
@@ -1541,10 +1561,36 @@ function addObs(x,z,w,d,h,color,tip,gorH){
    Çarpışma kutusu aynı yükseklikte kalıyor (mermi siperi hâlâ çalışsın), ama
    görünen kısım alçak ve geniş bir kar seti — sınırı okutuyor, manzarayı
    kesmiyor. gorH: çizilen yükseklik, h: çarpışma yüksekliği. */
-addObs(0,-AR-1,AR*2+4,2.6,2.6,TEMA.duvar,'duz',0.85);
-addObs(0, AR+1,AR*2+4,2.6,2.6,TEMA.duvar,'duz',0.85);
-addObs(-AR-1,0,2.6,AR*2+4,2.6,TEMA.duvar,'duz',0.85);
-addObs( AR+1,0,2.6,AR*2+4,2.6,TEMA.duvar,'duz',0.85);
+if(HARITA==='kasaba'){
+  /* KAPALI AVLU SURU. Kar haritasındaki alçak set burada yanlış: referansın
+     çerçevesi sürekli ve YÜKSEK bir taş sur, güney kenarında ahşap çift kanatlı
+     kapı. Sur yalnız sınır değil, mekânı "bir yer" yapan şey — meydandan karşı
+     kenarı görülebildiği için (32 birim, sis 58) avlu kapanıyor.
+     Yükseklik 4.2: binaların 6.2'sinden alçak (siluet binalarda kalsın) ama
+     karakterin 1.85'inin iki katından fazla, yani üstünden görülmüyor. */
+  const SUR_H=4.2, SUR_K=1.8;                 /* yükseklik, kalınlık */
+  const KAPI_YARI=4.0;                        /* güney kapısının yarı genişliği */
+  const d=AR+SUR_K/2;
+  addObs(0, d, AR*2+SUR_K, SUR_K, SUR_H, TEMA.duvar,'duz');
+  addObs(-d, 0, SUR_K, AR*2+SUR_K, SUR_H, TEMA.duvar,'duz');
+  addObs( d, 0, SUR_K, AR*2+SUR_K, SUR_H, TEMA.duvar,'duz');
+  /* Güney duvarı KAPI için ikiye bölünüyor — tek uzun kutu olsaydı geçit
+     çarpışmada kapalı kalırdı. */
+  const yan=(AR+SUR_K/2-KAPI_YARI)/2;
+  for(const yon of [-1,1])
+    addObs(yon*(KAPI_YARI+yan), -d, yan*2, SUR_K, SUR_H, TEMA.duvar,'duz');
+  /* kapı eşiği: alçak ahşap kiriş, geçilebilir ama girişi okutuyor */
+  STAT.push({geo:GEO.box, model:mModel(0,0.22,-d,0,KAPI_YARI*2,0.44,SUR_K*1.1),
+             color:0x4a382a, emiss:0, kar:0, parilti:0, doku:0.5});
+} else {
+  /* Arena sınırı: 2.6'lık duvar ufku boydan boya kesen bir çit gibi duruyordu.
+     Çarpışma kutusu aynı yükseklikte kalıyor (mermi siperi hâlâ çalışsın), ama
+     görünen kısım alçak ve geniş bir kar seti. gorH: çizilen, h: çarpışma. */
+  addObs(0,-AR-1,AR*2+4,2.6,2.6,TEMA.duvar,'duz',0.85);
+  addObs(0, AR+1,AR*2+4,2.6,2.6,TEMA.duvar,'duz',0.85);
+  addObs(-AR-1,0,2.6,AR*2+4,2.6,TEMA.duvar,'duz',0.85);
+  addObs( AR+1,0,2.6,AR*2+4,2.6,TEMA.duvar,'duz',0.85);
+}
 /* Kar gölgesi yamaları — deterministik, zemine değer katıyor */
 const KAR=[];
 if(HARITA==='kar')
@@ -1661,10 +1707,15 @@ const BINA_YER=[];      /* {tip, x, z, yaw, olcek} — binalar.json gelince çiz
 let IZGARA=[0,1,0];
 if(HARITA==='kasaba'){
   let r=90210; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
-  const BLOK=13.5, SOKAK=7.0, ADIM=BLOK+SOKAK;
-  const N=4;                                  /* blok sayısı (kenar başına) */
+  /* 3 blok + 4 sokak = 3×11.5 + 4×7 = 62.5 ≈ arena 64.
+     4×4'ten 3×3'e inmenin sebebi yalnız küçülme değil: TEK SAYIDA blok olunca
+     ORTA BLOK boşaltılabiliyor ve referanstaki merkezî meydan çıkıyor. Çift
+     sayıda blokta merkez bir sokak kesişimine denk geliyor, meydan olmuyor. */
+  const BLOK=11.5, SOKAK=7.0, ADIM=BLOK+SOKAK;
+  const N=3;                                  /* blok sayısı (kenar başına) */
   const BAS=-(N*BLOK+(N+1)*SOKAK)/2 + SOKAK;  /* ilk bloğun sol-üst köşesi */
   IZGARA=[BAS,ADIM,SOKAK];
+  const ORTA=(N-1)/2;                         /* meydan olacak blok indeksi */
   /* Bina ölçekleri: modeller 1.9'luk kutuda geliyor, karakter 1.85.
      Bir dükkân kapısı karakterden yüksek olmalı — iki katlı ev ~6.2 birim. */
   const OLCEK={0:6.2/1.90, 1:6.2/1.90, 2:5.6/0.95};   /* bina3 alçak ve uzun */
@@ -1680,6 +1731,12 @@ if(HARITA==='kasaba'){
   }
   /* --- blok kenarlarına cephe diz --- */
   for(let bi=0;bi<N;bi++) for(let bj=0;bj<N;bj++){
+    /* ORTA BLOK BOŞ — MEYDAN.
+       Referansın odak noktası bu: ortada açık, döşeli bir alan ve merkezinde
+       kuyu. Oyun açısından da düellonun doğal yeri orası; çevresindeki bloklar
+       siper, meydan da temiz görüş hattı. Izgaranın her yeri aynı olduğunda
+       harita okunmuyordu. */
+    if(bi===ORTA && bj===ORTA) continue;
     const x0=BAS+bi*ADIM, z0=BAS+bj*ADIM;      /* bloğun sol-üst köşesi */
     const mx=x0+BLOK/2, mz=z0+BLOK/2;
     /* Dört kenar: her kenara 1 uzun sıra (bina3) ya da 2 ev.
@@ -1717,23 +1774,29 @@ if(HARITA==='kasaba'){
       }
     }
   }
-  /* --- ÇIKMAZLAR: kenardaki sokak ağızlarını kapat --- */
-  const agiz=[];
-  for(let i=0;i<=N;i++){
-    const s=BAS-SOKAK/2+i*ADIM;                /* i. sokağın orta ekseni */
-    agiz.push({x:s, z:BAS-SOKAK/2, yaw:0},
-              {x:s, z:BAS-SOKAK/2+N*ADIM, yaw:Math.PI},
-              {x:BAS-SOKAK/2, z:s, yaw:Math.PI/2},
-              {x:BAS-SOKAK/2+N*ADIM, z:s, yaw:-Math.PI/2});
+  /* --- ÇIKMAZLAR ---
+     Eski sürüm kenardaki sokak AĞIZLARINI kapatıyordu; sur gelince o iş zaten
+     yapılmış oldu — her sokak duvarda bitiyor. Şimdi tıkanan yerler İÇERİDEKİ
+     sokak parçaları: referanstaki binalar arası çitlerin yaptığı şey, yani
+     blokların arasında cep ve avlu oluşturmak.
+     MEYDANIN DÖRT YAKLAŞIMI KORUNUYOR: düello alanına giden yol kapanırsa
+     düşman oraya hiç gelemez ve haritanın odağı ölür. */
+  const kesisim=[];
+  for(let i=0;i<=N;i++) for(let jj=0;jj<=N;jj++){
+    const x=BAS-SOKAK/2+i*ADIM, z=BAS-SOKAK/2+jj*ADIM;
+    if(Math.abs(x)>AR-SOKAK||Math.abs(z)>AR-SOKAK) continue;   /* sura yapışık */
+    const meydanYolu=(Math.abs(x)<1)!==(Math.abs(z)<1);        /* meydana giren eksen */
+    if(meydanYolu) continue;
+    kesisim.push({x,z});
   }
   let kapali=0;
-  for(const a of agiz){
-    if(kapali>=6) break;
-    if(rnd()>0.30) continue;
-    if(Math.hypot(a.x,a.z)<ADIM) continue;     /* merkezi tıkama */
-    binaKoy(2,a.x,a.z,a.yaw); kapali++;
+  for(const a of kesisim){
+    if(kapali>=3) break;
+    if(rnd()>0.45) continue;
+    binaKoy(2,a.x,a.z,rnd()<0.5?0:Math.PI/2); kapali++;
   }
-  console.log(`KASABA: ${BINA_YER.length} bina, ${kapali} çıkmaz, arena ${AR*2}×${AR*2}`);
+  console.log(`KASABA: ${BINA_YER.length} bina, ${kapali} iç tıkaç, meydan ${BLOK}×${BLOK}, `
+    +`arena ${AR*2}×${AR*2}`);
 }
 /* Kar gölge yamaları da statik — kaynağa dahil (26 çağrı daha eksilir) */
 for(const y of KAR)
@@ -1924,7 +1987,7 @@ function spawnEnemy(){
    menzili aynı, aradaki fark hızda (=varış süresinde) kalıyor. */
 function fire(x,y,z,dx,dy,dz,el,guc,sahip,tgt){
   const sp=MU.ELEM[el].hiz;
-  shots.push({x,y,z,vx:dx*sp,vy:dy*sp,vz:dz*sp,el,guc,sahip,life:4,tgt,r:0.45,menzil:ATAK_BIRAK});
+  shots.push({x,y,z,vx:dx*sp,vy:dy*sp,vz:dz*sp,el,guc,sahip,life:4,tgt,r:0.45,menzil:MERMI_MENZIL});
 }
 function boom(x,y,z,scale,color){ fx.push({x,y,z,t:0,scale,color}); }
 
@@ -1942,17 +2005,18 @@ const D=MU.yeniDizi();            /* mühür dizisi durumu — muhur.js yönetiy
    bedavaya biliniyordu ve pusuya sokulmak diye bir şey kalmıyordu. Üstelik
    kilidin kendisi ele veriyordu — kamerayı düşmana çeviren şey kilitti, yani
    arkadan yaklaşan düşmanı oyun oyuncuya kendi gösteriyordu.
-   Kilit üç şartı BİRDEN istiyor artık — hepsi tek soruya bakıyor: "şimdi ateş
-   etsem vurur muydum?"
+   KURULMA üç şartı BİRDEN istiyor — hepsi tek soruya bakıyor: "şimdi ateş etsem
+   vurur muydum?"
      · menzil — ATAK_MENZIL içinde olacak
      · hat    — MERMİNİN GİDECEĞİ YOL açık olacak (bkz. atisHatti)
      · koni   — kameranın baktığı yönde olacak; arkadan sokulan kilitlenmez
-   Kopması: menzil ATAK_BIRAK'a kadar esniyor (histerezis, düşman bir adım geri
-   çekilince kilit düşmesin) ama HAT için pay yok. Araya bir obje girdiği anda
-   kilit kopuyor — vuramayacağın hedefe kilitli kalmak yalanın ta kendisi.
-   Anlık kopuş kamerayı titretmiyor: hat bir-iki kare kesilip yeniden açılırsa
-   aynı düşmana anında geri kilitleniyor ve kameranın zaman sabiti (~0.28 sn) o
-   aralığı zaten yutuyor. */
+   AYAKTA KALMA ise tek şart: aynı alanda olmak (KILIT_KOPMA). Bir ara kurulma
+   şartları ayakta kalmaya da uygulanıyordu — kilit boşa düşüp duruyordu, çünkü
+   kasabada dövüş zaten binaların arasında geçiyor: düşman köşeyi her dönüşünde
+   hat kapanıyor, kilit kopuyor, oyuncu ateş edeceği anda hedefini kaybediyordu.
+   Yerini gizleme derdi yalnız İLK kilitte anlamlı; bir kez gördükten sonra
+   duvarın arkasına geçmesi onu kaybettirmemeli. Sırtını dönmek de kopartmıyor:
+   koni yalnız kurulmada bakılıyor. */
 const KILIT_KONI=Math.cos(1.05);   /* kameranın ±60°'si: "önümde" demek */
 /* MERMİNİN HATTI, yerdeki görüş çizgisi DEĞİL. hasLOS 1.15 yüksekliğinde düz
    bir çizgi bakıyor; mermi ise namludan (1.35) düşmanın göz hizasına eğik
@@ -1971,8 +2035,9 @@ let LOCK=null;                     /* kilitli düşman */
 function updateLock(){
   if(LOCK){
     const d=Math.hypot(LOCK.x-P.x,LOCK.z-P.z);
-    /* öldüyse enemies'ten çıkarılmış olur; bayat referansla kilitli kalmasın */
-    if(enemies.indexOf(LOCK)<0||d>ATAK_BIRAK||!atisHatti(LOCK)) LOCK=null;
+    /* öldüyse enemies'ten çıkarılmış olur; bayat referansla kilitli kalmasın.
+       Hat ve açı burada SORULMUYOR: aynı alandaysa kilit sürüyor. */
+    if(enemies.indexOf(LOCK)<0||d>KILIT_KOPMA) LOCK=null;
   }
   if(LOCK) return;                 /* kilit duruyorsa hedef değiştirme */
   let best=null,bd=ATAK_MENZIL;
@@ -2199,7 +2264,15 @@ function ates(beceri){
    rakibin hareketi anlamsızlaşırdı. Gecikme kaçma penceresidir. */
 function alanAc(beceri){
   let hx,hz;
-  if(LOCK){ hx=LOCK.x; hz=LOCK.z; }
+  /* Kilit KILIT_KOPMA'ya (16) kadar sürüyor, mermi ise MERMI_MENZIL (10) kadar
+     uçuyor. Alan da kilide sınırsız uysaydı 14 birimdeki hedefe göktaşı düşer,
+     aynı hedefe atılan ok havada sönerdi — menzil tek doğru olmalı. Kilit
+     menzilin ötesindeyse alan onun YÖNÜNDE, menzilin ucuna iniyor. */
+  if(LOCK){
+    const dx=LOCK.x-P.x, dz=LOCK.z-P.z, d=Math.hypot(dx,dz)||1;
+    const k=Math.min(1, MERMI_MENZIL/d);
+    hx=P.x+dx*k; hz=P.z+dz*k;
+  }
   else { hx=P.x+Math.sin(P.yaw)*ATAK_MENZIL; hz=P.z+Math.cos(P.yaw)*ATAK_MENZIL; }
   alanlar.push({x:hx,z:hz,t:beceri.gecikme,tam:beceri.gecikme,
                 r:beceri.yaricap,el:beceri.el,kat:beceri.kat,sahip:'oyuncu'});
@@ -3198,8 +3271,12 @@ function render(now){
     /* 2.55 primitif ninjanın boyuna göreydi; derili model çömelik durduğu için
        ok can barının bir hayli üstünde kalıyordu. Barla aynı kemiğe bağlandı. */
     const ly=(LOCK.tepeY!==undefined?LOCK.tepeY+0.45:2.55)+Math.sin(now*0.006)*0.12;
-    draw(GEO.cone,M(mT(LOCK.x,ly,LOCK.z),mRx(Math.PI),mS(0.45,0.55,0.45)),0xff8f5e,1,0.75);
-    draw(GEO.torus,M(mT(LOCK.x,0.12,LOCK.z),mS(2.4,1.4,2.4)),0xff8f5e,1,0.4);
+    /* Kilit duvarın arkasında da sürüyor (bkz. KILIT_KOPMA) ama mermi duvara
+       çarpar. Gösterge o farkı söylemezse oyuncu enerjisini boşa harcıyor ve
+       sebebini göremiyor: hat kapalıyken ok da halka da soluk. */
+    const vurulur=atisHatti(LOCK), a=vurulur?1:0.32;
+    draw(GEO.cone,M(mT(LOCK.x,ly,LOCK.z),mRx(Math.PI),mS(0.45,0.55,0.45)),0xff8f5e,1,0.75*a);
+    draw(GEO.torus,M(mT(LOCK.x,0.12,LOCK.z),mS(2.4,1.4,2.4)),0xff8f5e,1,0.4*a);
   }
   for(const f of fx){
     const t=f.t/0.45,sc=(0.4+t*2.2)*f.scale;
@@ -3236,18 +3313,22 @@ function cizDusmanCan(){
        haritanın öbür ucundakinin barı sisin içinden pırıl pırıl okunuyordu.
        Kilit kısıtlandıktan sonra düşmanın yerini asıl ele veren şey buydu.
        Görüş yoksa bar da yok — siper artık gerçekten saklıyor.
+       KİLİTLİ DÜŞMAN İSTİSNA: onun yerini zaten ok ile halka söylüyor, barı
+       ayrıca gizlemek saklamak değil, yalnız oyuncuyu canından edecek bilgiden
+       yoksun bırakmak olurdu.
        Telegraf yayı kaybolmuyor: düşman yalnız görüş varken ve ATAK_MENZIL (8)
        içinden ateş ediyor, HUD_MENZIL ise 12 — yani atış gelirken bar hep
        ekranda, üstelik dört birimlik payla. Sönümleme sise değil bu menzile
        bağlı: sisi ölçüt alsaydım (gece temasında 16) sınır atış menzilinin çok
        ötesinde kalır, HUD yine harita çapında radar gibi çalışırdı. */
+    const kilitli = e===LOCK;
     const dP=Math.hypot(e.x-P.x,e.z-P.z);
-    if(dP>HUD_MENZIL) continue;
-    if(!hasLOS(e.x,e.z,P.x,P.z,1.15)) continue;
+    if(dP>HUD_MENZIL&&!kilitli) continue;
+    if(!hasLOS(e.x,e.z,P.x,P.z,1.15)&&!kilitli) continue;
     const o=Math.max(0,e.can)/e.canMax;
     const w=56,h=6, x=p.x-w/2, y=p.y;
     const sol=Math.max(0.25,Math.min(1,14/p.z))            /* uzaktakiler sönükleşsin */
-             *Math.min(1,(HUD_MENZIL-dP)/4);               /* menzil kenarında tamamen sön */
+             *(kilitli?1:Math.min(1,(HUD_MENZIL-dP)/4));   /* menzil kenarında tamamen sön */
     ctx.globalAlpha=sol;
     ctx.fillStyle=TEMA===TEMALAR.gece?'rgba(10,15,32,.78)':'rgba(255,255,255,.82)';
     ctx.beginPath();ctx.roundRect(x-2,y-2,w+4,h+4,5);ctx.fill();
