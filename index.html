@@ -1702,101 +1702,140 @@ if(HARITA==='kar')
    KENARINDAN içeri bir adım oluyor, yani çıkmaz oluşuyor ama ana ağ bağlı
    kalıyor. Bağlantı ayrıca ölçülüyor (tools/kasaba.js). */
 const BINA_YER=[];      /* {tip, x, z, yaw, olcek} — binalar.json gelince çizilecek */
+/* VİTRİN MODU: ?vitrin ile kasaba yerine varlıklar tek sıra dizilir.
+   Bir varlık paketi geldiğinde "hangisi bina, hangisi çit, hangisi fener"
+   sorusunu en-boy oranından TAHMİN etmek bu projede defalarca yanlış çıktı;
+   hepsini yan yana koyup tek ekran görüntüsü almak konuyu bitiriyor. */
+const VITRIN=location.search.indexOf('vitrin')>=0;
 /* Izgara zemin shader'ına da gidiyor: sokak taşı ile avlu toprağını ayıran
    maske aynı sayılardan hesaplanıyor, yoksa döşeme binalarla hizasız kalır. */
 let IZGARA=[0,1,0];
-if(HARITA==='kasaba'){
+if(HARITA==='kasaba' && VITRIN){
+  /* Sıra: her tip bir kez, aralarında 9 birim. Ölçek 1: modeller kendi
+     kutusunda, karşılaştırma bozulmasın. */
+  for(let t=0;t<12;t++) BINA_YER.push({tip:t, x:-45+t*9, z:0, yaw:0, olcek:3.2, blok:0});
+}
+else if(HARITA==='kasaba'){
   let r=90210; const rnd=()=>((r=r*1103515245+12345&0x7fffffff)/0x7fffffff);
   /* 3 blok + 4 sokak = 3×11.5 + 4×7 = 62.5 ≈ arena 64.
-     4×4'ten 3×3'e inmenin sebebi yalnız küçülme değil: TEK SAYIDA blok olunca
-     ORTA BLOK boşaltılabiliyor ve referanstaki merkezî meydan çıkıyor. Çift
-     sayıda blokta merkez bir sokak kesişimine denk geliyor, meydan olmuyor. */
+     TEK SAYIDA blok olması şart: orta blok boşaltılıp meydan oluyor. Çift
+     sayıda merkez bir sokak kesişimine denk geliyor ve meydan olmuyor. */
   const BLOK=11.5, SOKAK=7.0, ADIM=BLOK+SOKAK;
-  const N=3;                                  /* blok sayısı (kenar başına) */
-  const BAS=-(N*BLOK+(N+1)*SOKAK)/2 + SOKAK;  /* ilk bloğun sol-üst köşesi */
+  const N=3, BAS=-(N*BLOK+(N+1)*SOKAK)/2 + SOKAK, ORTA=(N-1)/2;
   IZGARA=[BAS,ADIM,SOKAK];
-  const ORTA=(N-1)/2;                         /* meydan olacak blok indeksi */
-  /* Bina ölçekleri: modeller 1.9'luk kutuda geliyor, karakter 1.85.
-     Bir dükkân kapısı karakterden yüksek olmalı — iki katlı ev ~6.2 birim. */
-  const OLCEK={0:6.2/1.90, 1:6.2/1.90, 2:5.6/0.95};   /* bina3 alçak ve uzun */
-  const AYAK={0:[1.59,1.25], 1:[1.45,1.31], 2:[1.90,0.70]};
-  function binaKoy(tip,x,z,yaw,blok){
-    const s=OLCEK[tip], [w0,d0]=AYAK[tip];
-    let w=w0*s, d=d0*s;
-    if(Math.abs(Math.cos(yaw))<0.5){ const t=w; w=d; d=t; }   /* 90° dönükse eksen takas */
-    /* Çarpışma kutusu cepheden biraz DAR: saçak ve fener kolu dışarı taşıyor,
-       onları da katarsak oyuncu duvara değmeden takılıyor. */
-    OBS.push({minx:x-w*0.44,maxx:x+w*0.44,minz:z-d*0.44,maxz:z+d*0.44,h:6.2,duvar:false});
-    BINA_YER.push({tip,x,z,yaw,olcek:s,blok:blok===undefined?-1:blok});
+
+  /* AYAK İZLERİ — assets/roller.json'daki hedef yüksekliklerden ölçülerek
+     çıkarıldı (bkz. o dosya). Düzen JSON gelmeden çalışmak zorunda: çarpışma
+     ve YZ ilk kareden itibaren doğru olmalı, çizim bekleyebilir. O yüzden
+     ayak izleri burada sabit, ölçek ise varlık gelince kendi boyundan
+     hesaplanıyor. */
+  const AYAK={ ev:[4.8,4.4], dukkan:[4.3,5.4], tezgah:[4.6,3.8],
+               kuyu:[4.6,5.5], duvar:[14.5,1.3], cit:[4.4,0.5],
+               sutun:[1.5,1.5], korkuluk:[4.4,0.6], bordur:[4.5,0.4] };
+  const YUKSEK={ ev:6.2, dukkan:6.2, tezgah:3.6, kuyu:3.4, duvar:3.2,
+                 cit:2.4, sutun:4.6, korkuluk:1.5, bordur:0.9 };
+  /* Çarpışma yalnız GERÇEKTEN engelleyenlerde. Bordür ve korkuluk alçak;
+     kutu koyarsak oyuncu bir kaldırıma takılıp kalıyor. */
+  const KATI={ ev:1, dukkan:1, tezgah:1, kuyu:1, duvar:1, cit:1, sutun:1 };
+
+  function koy(rol,x,z,yaw,blok){
+    const [w0,d0]=AYAK[rol]||[3,3];
+    let w=w0, d=d0;
+    if(Math.abs(Math.cos(yaw))<0.5){ const t=w; w=d; d=t; }   /* 90° dönükse takas */
+    if(KATI[rol]){
+      /* Kutu cepheden biraz dar: saçak ve fener kolu dışarı taşıyor, onları da
+         katarsak oyuncu duvara değmeden takılıyor. */
+      OBS.push({minx:x-w*0.44,maxx:x+w*0.44,minz:z-d*0.44,maxz:z+d*0.44,
+                h:YUKSEK[rol]||3,duvar:rol==='duvar'});
+    }
+    BINA_YER.push({rol,x,z,yaw,blok:blok===undefined?-1:blok});
   }
-  /* --- blok kenarlarına cephe diz --- */
-  for(let bi=0;bi<N;bi++) for(let bj=0;bj<N;bj++){
-    /* ORTA BLOK BOŞ — MEYDAN.
-       Referansın odak noktası bu: ortada açık, döşeli bir alan ve merkezinde
-       kuyu. Oyun açısından da düellonun doğal yeri orası; çevresindeki bloklar
-       siper, meydan da temiz görüş hattı. Izgaranın her yeri aynı olduğunda
-       harita okunmuyordu. */
-    if(bi===ORTA && bj===ORTA) continue;
-    const x0=BAS+bi*ADIM, z0=BAS+bj*ADIM;      /* bloğun sol-üst köşesi */
-    const mx=x0+BLOK/2, mz=z0+BLOK/2;
-    /* Dört kenar: her kenara 1 uzun sıra (bina3) ya da 2 ev.
-       Kenar seçimi bloktan bloğa değişsin ki cepheler tekrarlı durmasın. */
+
+  /* --- SUR: taş duvar panelleri + köşe/ara sütunlar, güneyde kapı ---
+     Referansın çerçevesi bu. Panel boyu 14.5, kenar 64 → kenar başına 5 panel
+     (hafif bindirmeli). Kapı güneyde, iki yanında sütun. */
+  { const PANEL=14.5, ic=AR-0.9;
     const kenarlar=[
-      {yaw:0,          cx:mx,        cz:z0-0.3,      uzun:'x'},
-      {yaw:Math.PI,    cx:mx,        cz:z0+BLOK+0.3, uzun:'x'},
-      {yaw:Math.PI/2,  cx:x0-0.3,    cz:mz,          uzun:'z'},
-      {yaw:-Math.PI/2, cx:x0+BLOK+0.3,cz:mz,         uzun:'z'},
+      {sx:0,sz:-1, yaw:0},        /* güney (kapılı) */
+      {sx:0,sz: 1, yaw:Math.PI},
+      {sx:-1,sz:0, yaw:Math.PI/2},
+      {sx: 1,sz:0, yaw:-Math.PI/2},
     ];
-    /* UZUN SIRA TERCİH EDİLİYOR (0.34 → 0.62). Bir kenarı tek binayla kapatmak
-       iki evle kapatmanın yarısı kadar üçgen yiyor ve cephe daha bütün duruyor.
-       95 bina 312.000 üçgen demekti ve oyun kasıyordu. */
-    const blok=bi*N+bj;
     for(const k of kenarlar){
-      /* Kenarın tamamını boş bırak. Oran ayarıyla 77'den 73'e ancak inmişti;
-         uzun sırayı tercih etmek sayıyı azaltmıyor çünkü zaten kenar başına tek
-         bina koyuyor. Asıl kaldıraç kenarı komple atlamak — hem üçgen bütçesi
-         düşüyor hem bloklar arasında avlu geçişleri açılıyor. */
-      if(rnd()<0.34) continue;
-      /* Şekil denetimi eklendikten sonra sadeleştirici bina başına 1.200
-         yerine ~2.200 üçgende duruyor (diken üretmeyi reddediyor). Bütçeyi
-         korumak için bina SAYISI düşürüldü: uzun dükkân sırası tercih ediliyor
-         ve daha çok kenar boş bırakılıyor. 77 → ~48 kopya. */
-      if(rnd()<0.74){                          /* uzun dükkân sırası */
-        binaKoy(2,k.cx,k.cz,k.yaw,blok);
-      } else {                                 /* iki ayrı ev */
-        const ofs=BLOK*0.26;
-        for(const yon of [-1,1]){
-          const x=k.uzun==='x'?k.cx+yon*ofs:k.cx;
-          const z=k.uzun==='x'?k.cz:k.cz+yon*ofs;
-          if(rnd()<0.42) continue;             /* boşluk: avlu girişi */
-          binaKoy(rnd()<0.5?0:1, x, z, k.yaw, blok);
-        }
+      const kapili=(k.sz===-1);
+      for(let i=0;i<5;i++){
+        const t=-AR+PANEL*(i+0.5);                 /* panel merkezi, kenar boyunca */
+        if(kapili && Math.abs(t)<PANEL*0.75) continue;   /* kapı boşluğu */
+        const x=k.sx? k.sx*ic : t, z=k.sz? k.sz*ic : t;
+        koy('duvar',x,z,k.yaw);
+      }
+    }
+    /* sütunlar: dört köşe + kapının iki yanı */
+    for(const [sx,sz] of [[-1,-1],[1,-1],[-1,1],[1,1]]) koy('sutun',sx*ic,sz*ic,0);
+    for(const yon of [-1,1]) koy('sutun',yon*PANEL*0.75,-ic,0);
+  }
+
+  /* --- BLOKLAR: kenarlara cephe, aralara çit --- */
+  for(let bi=0;bi<N;bi++) for(let bj=0;bj<N;bj++){
+    if(bi===ORTA && bj===ORTA) continue;           /* meydan */
+    const x0=BAS+bi*ADIM, z0=BAS+bj*ADIM;
+    const mx=x0+BLOK/2, mz=z0+BLOK/2, blok=bi*N+bj;
+    const kenarlar=[
+      {yaw:0,          cx:mx,          cz:z0-0.3,      uzun:'x'},
+      {yaw:Math.PI,    cx:mx,          cz:z0+BLOK+0.3, uzun:'x'},
+      {yaw:Math.PI/2,  cx:x0-0.3,      cz:mz,          uzun:'z'},
+      {yaw:-Math.PI/2, cx:x0+BLOK+0.3, cz:mz,          uzun:'z'},
+    ];
+    for(const k of kenarlar){
+      const ofs=BLOK*0.26;
+      const yerler=[-1,1].map(yon=>({
+        x: k.uzun==='x'? k.cx+yon*ofs : k.cx,
+        z: k.uzun==='x'? k.cz         : k.cz+yon*ofs }));
+      for(const y of yerler){
+        const p=rnd();
+        /* Referansta bina ile çit iç içe: her boşluk bina değil, bir kısmı
+           çitle kapatılmış avlu girişi. Oran kabaca ikide bir. */
+        if(p<0.42)      koy('ev',    y.x,y.z,k.yaw,blok);
+        else if(p<0.70) koy('dukkan',y.x,y.z,k.yaw,blok);
+        else if(p<0.92) koy('cit',   y.x,y.z,k.yaw,blok);
+        /* kalanı açık bırakılıyor — avluya giriş */
       }
     }
   }
-  /* --- ÇIKMAZLAR ---
-     Eski sürüm kenardaki sokak AĞIZLARINI kapatıyordu; sur gelince o iş zaten
-     yapılmış oldu — her sokak duvarda bitiyor. Şimdi tıkanan yerler İÇERİDEKİ
-     sokak parçaları: referanstaki binalar arası çitlerin yaptığı şey, yani
-     blokların arasında cep ve avlu oluşturmak.
-     MEYDANIN DÖRT YAKLAŞIMI KORUNUYOR: düello alanına giden yol kapanırsa
-     düşman oraya hiç gelemez ve haritanın odağı ölür. */
+
+  /* --- MEYDAN: kuyu merkezde, iki tezgâh, kenarında bordür --- */
+  koy('kuyu',0,0,rnd()*6.283);
+  for(const [ax,az] of [[-1,1],[1,-1]]){
+    koy('tezgah', ax*BLOK*0.40, az*BLOK*0.40, Math.atan2(-ax,-az));
+  }
+  /* Bordür meydanın sınırını okutuyor: oyuncu düello alanına girdiğini
+     ayağının altından anlıyor. Çarpışması yok, sadece görsel. */
+  { const R=BLOK*0.52, adet=4;
+    for(let i=0;i<adet;i++){
+      const t=-R+ (2*R)*(i+0.5)/adet;
+      koy('bordur', t,-R,0); koy('bordur', t, R,Math.PI);
+      koy('bordur',-R, t,Math.PI/2); koy('bordur', R, t,-Math.PI/2);
+    }
+  }
+
+  /* --- İÇ TIKAÇLAR: cep ve çıkmaz. Meydanın dört yaklaşımı korunuyor --- */
   const kesisim=[];
   for(let i=0;i<=N;i++) for(let jj=0;jj<=N;jj++){
     const x=BAS-SOKAK/2+i*ADIM, z=BAS-SOKAK/2+jj*ADIM;
-    if(Math.abs(x)>AR-SOKAK||Math.abs(z)>AR-SOKAK) continue;   /* sura yapışık */
-    const meydanYolu=(Math.abs(x)<1)!==(Math.abs(z)<1);        /* meydana giren eksen */
-    if(meydanYolu) continue;
+    if(Math.abs(x)>AR-SOKAK||Math.abs(z)>AR-SOKAK) continue;
+    if((Math.abs(x)<1)!==(Math.abs(z)<1)) continue;     /* meydana giren eksen */
     kesisim.push({x,z});
   }
   let kapali=0;
   for(const a of kesisim){
     if(kapali>=3) break;
-    if(rnd()>0.45) continue;
-    binaKoy(2,a.x,a.z,rnd()<0.5?0:Math.PI/2); kapali++;
+    if(rnd()>0.5) continue;
+    koy('cit',a.x,a.z,rnd()<0.5?0:Math.PI/2); kapali++;
   }
-  console.log(`KASABA: ${BINA_YER.length} bina, ${kapali} iç tıkaç, meydan ${BLOK}×${BLOK}, `
-    +`arena ${AR*2}×${AR*2}`);
+  const say={};
+  for(const b of BINA_YER) say[b.rol]=(say[b.rol]||0)+1;
+  console.log('KASABA '+(AR*2)+'×'+(AR*2)+' · '+BINA_YER.length+' parça · '
+    +Object.entries(say).map(([k,v])=>k+':'+v).join(' '));
 }
 /* Kar gölge yamaları da statik — kaynağa dahil (26 çağrı daha eksilir) */
 for(const y of KAR)
@@ -1851,9 +1890,27 @@ if(HARITA==='kasaba') fetch(varlik('assets/binalar.json'),{cache:'no-store'}).th
   if(!j||!j.bina) return;
   BINA_DOKULU=!!j.bina[0].uv;
   if(BINA_DOKULU) j.bina.forEach(b=>binaAtlas(b.ad,b.doku));
+  /* ROLDEN VARLIĞA. Düzen indeks değil ROL yazıyor ("ev","duvar","kuyu"…),
+     çünkü varlık paketi değiştiğinde indeksler kayıyor ama roller kalıyor.
+     Aynı role birden çok varlık düşerse aralarında dönüşümlü seçiliyor —
+     cepheler tekrarlı durmasın. */
+  const rolVarlik=new Map();
+  j.bina.forEach((b,i)=>{
+    const rol=b.rol||'ev';
+    if(!rolVarlik.has(rol)) rolVarlik.set(rol,[]);
+    rolVarlik.get(rol).push(i);
+  });
   const gruplar=new Map();
+  const eksikRol=new Set();
+  let sayac=0;
   for(const y of BINA_YER){
+    const liste=rolVarlik.get(y.rol);
+    if(!liste||!liste.length){ eksikRol.add(y.rol); continue; }
+    y.tip=liste[(sayac++)%liste.length];
     const b=j.bina[y.tip]; if(!b) continue;
+    /* Ölçek varlığın KENDİ boyundan: modeller 1.9'luk kutuda geliyor ama
+       kutuyu doldurma oranları farklı, sabit çarpan hepsini bozardı. */
+    y.olcek=(b.hedefBoy||6.2)/(b.boy||1.9);
     /* Modeller kendi kutularında merkezlenmemiş: taban y=0'da ama x/z merkezi
        kayabiliyor. Önce merkezi orijine taşı, sonra ölçekle ve döndür. */
     const m=M(mT(y.x,0,y.z), mRy(y.yaw), mS(y.olcek,y.olcek,y.olcek),
@@ -1871,6 +1928,7 @@ if(HARITA==='kasaba') fetch(varlik('assets/binalar.json'),{cache:'no-store'}).th
                    emiss:bl.isik?0.9:0, kar:0, parilti:0, doku:0.55});
     }
   }
+  if(eksikRol.size) console.warn('rol karşılığı yok: '+[...eksikRol].join(', '));
   let ucgen=0, cizim=0;
   for(const gr of gruplar.values()){
     const parca = BINA_DOKULU

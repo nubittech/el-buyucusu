@@ -40,6 +40,20 @@ const {sadelestirQEM}=require('./sadelestir.js');
 const argv=process.argv.slice(2);
 const kok=argv[0]||path.join(process.env.HOME,'Desktop','newmap');
 let cikti='assets/binalar.json', HEDEF=1400;
+/* ROL YAPILANDIRMASI (assets/roller.json): klasör başına rol ve üçgen bütçesi.
+   Tek bir --hedef herkese uymuyor — duvar parçası çevrede ~45 kez tekrarlanıyor,
+   dükkân 8 kez. İkisine aynı bütçeyi vermek duvarları tek başına 80.000 üçgene
+   çıkarıyordu. Rol ayrıca YERLEŞTİRMEYİ belirliyor; oyun tarafı bu adları
+   okuyor, klasör kimliklerini değil. */
+let ROLLER={};
+try{ ROLLER=require(path.join(__dirname,'..','assets','roller.json')).roller||{}; }
+catch(e){ console.warn('assets/roller.json okunamadı, tek hedef kullanılacak'); }
+const rolBul=(ad)=>{
+  if(ROLLER[ad]) return ROLLER[ad];
+  /* klasör adında boşluk/parantez olabiliyor ("... (1)"); önek eşleşmesi */
+  for(const k in ROLLER) if(ad.startsWith(k)) return ROLLER[k];
+  return null;
+};
 for(let i=1;i<argv.length;i++){
   if(argv[i]==='--cikti') cikti=argv[++i];
   else if(argv[i]==='--hedef') HEDEF=+argv[++i];
@@ -61,7 +75,9 @@ for(const ad of klasorler){
   /* Geometri KONUMA göre; UV üçgen köşesinde kalıyor */
   const ucV=o.f.map(t=>[t[0][0],t[1][0],t[2][0]]);
   const ucIx=o.f.map((_,i)=>i);
-  const s=sadelestirQEM(o.v, ucV, HEDEF, ucIx, undefined, false, false);
+  const rol=rolBul(ad);
+  const hedefB=rol&&rol.hedef?rol.hedef:HEDEF;
+  const s=sadelestirQEM(o.v, ucV, hedefB, ucIx, undefined, false, false);
 
   /* Çıktı: her üçgen kendi üç UV'siyle yazılıyor, yani köşeler ÜÇGEN BAŞINA
      çoğaltılıyor. Paylaşılan köşe olmadığı için gölgeleme de düz oluyor —
@@ -93,7 +109,8 @@ for(const ad of klasorler){
      ("... (1)") ve kodlanmamış boşluk isteği kırar. binaatlas.sh de aynı
      indirgemeyi yapıyor, ikisinin AYNI adı üretmesi şart. */
   const guvenliAd=ad.replace(/[^a-zA-Z0-9._-]/g,'-');
-  binalar.push({ad:guvenliAd, boy:+boy.toFixed(4), en:+en.toFixed(4), derin:+derin.toFixed(4),
+  binalar.push({ad:guvenliAd, rol:rol?rol.rol:'ev', hedefBoy:rol?rol.yukseklik:6.2,
+    boy:+boy.toFixed(4), en:+en.toFixed(4), derin:+derin.toFixed(4),
     merkez:[+((mn[0]+mx[0])/2).toFixed(4), +mn[1].toFixed(4), +((mn[2]+mx[2])/2).toFixed(4)],
     doku:`assets/${guvenliAd}.webp`, p, n, uv:u, i});
 }

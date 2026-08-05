@@ -1,0 +1,16 @@
+{
+  "_": "Varlık rolleri ve üçgen bütçeleri. Rol yerleşimi belirliyor, hedef ise",
+  "__": "kaç kez tekrarlanacağına göre veriliyor: duvar parçası çevrede ~45 kez",
+  "___": "geçiyor, dükkân 8 kez. Aynı bütçeyi almaları saçma olurdu.",
+  "roller": {
+    "37bd13f3-ce4f-4a74-8df0-3d2927a32a25": { "rol": "sutun",    "hedef": 260,  "yukseklik": 4.6 },
+    "46c7d95f-854a-4e79-b78f-cce2c4126bdd": { "rol": "cit",      "hedef": 420,  "yukseklik": 2.4 },
+    "51cf5162-fe1d-45fa-bb8c-381fb32dc6a9": { "rol": "kuyu",     "hedef": 2200, "yukseklik": 3.4 },
+    "751d4130-edb9-4180-852c-ff0746b4b27d": { "rol": "korkuluk", "hedef": 320,  "yukseklik": 1.5 },
+    "b225ea5b-ff19-4607-a3ff-5c306dd20321": { "rol": "tezgah",   "hedef": 1500, "yukseklik": 3.6 },
+    "ce35a607-6769-456b-b2af-d6456f9237b0": { "rol": "duvar",    "hedef": 300,  "yukseklik": 3.2 },
+    "e67b2678-3303-4fed-b63f-519a075a07a1": { "rol": "dukkan",   "hedef": 2400, "yukseklik": 6.2 },
+    "fc0ec494-1019-4799-b753-f578f897176c": { "rol": "bordur",   "hedef": 240,  "yukseklik": 0.9 },
+    "bina4gen":                              { "rol": "ev",      "hedef": 2400, "yukseklik": 6.2 }
+  }
+}
