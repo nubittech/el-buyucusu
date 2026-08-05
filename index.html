@@ -1367,7 +1367,26 @@ const OY_CAN=100, EN_CAN=100;                /* düello birkaç doğru okuma sü
 const MAX_DUSMAN=1;                          /* tek tek gelsinler: aynı anda tek düşman */
 const TELEGRAF=1100;
 const SIPER_TAVAN=1.2;   /* düşman en çok bu kadar saniye saklanabilir, sonra saldırmak zorunda */                         /* düşman mührünü bu kadar önce belli eder */
-const DUSMAN_MENZIL=20;  /* düşman ancak bu mesafede ateş ediyor — baş üstü HUD sınırı buna bağlı */
+/* =============================================================
+   SALDIRI MENZİLİ — tek sayı, iki tarafı da bağlıyor
+   Eskiden menzil diye bir şey YOKTU: mermi yalnız 4 sn yaşıyordu, yani ateş 60,
+   su 64, hava 92, yıldırım 120 birim gidiyordu; arenanın köşegeni 124. Yıldırım
+   haritayı baştan başa geçiyordu. "Saldırı menzili" kâğıt üstünde bile tanımlı
+   olmayınca kilidi ona bağlamak da imkânsızdı — kilit uzaklığı boşlukta,
+   keyfî bir sayıydı.
+   ÖLÇÜM (kasaba haritası, 24 farklı oyuncu konumu × 72 yön = 1728 atış; merminin
+   engele çarpana kadar kat ettiği yol):
+     en kısa 0.7 · %25'i 2.5 · ORTANCA 5.7 · %75'i 9.5 · %90'ı 12.7 · en uzun 26
+     yönlerin %48'i 6, %28'i 9, %11'i 12 birimden uzağa açık.
+   Yani 12 birimlik kilit tam da o %11'lik uzun cadde durumunu yakalıyor ve
+   caddenin dibindeki düşmanı kameraya çevirip ele veriyordu.
+   ATAK_MENZIL, düşmanın kendi dövüş bandının (3.6-7.5) hemen üstünde.
+   MERMİ ATAK_BIRAK kadar uçuyor, kilit ise ATAK_MENZIL'de kuruluyor: aradaki
+   pay sayesinde menzilin ucunda kurulmuş bir kilidin mermisi, hedef yarım adım
+   geri çekilse bile ona YETİŞİYOR. Kilit varsa vuruş var. */
+const ATAK_MENZIL=8;     /* kilit bu mesafede kurulur; düşman da ancak buradan ateş eder */
+const ATAK_BIRAK=10;     /* kilit burada kopar — mermi de tam bu kadar uçup söner */
+const HUD_MENZIL=12;     /* düşmanın baş üstü canı/elementi bu mesafeden sonra görünmez */
 /* =============================================================
    ENERJİ — TASARIM.md §5b
    Sınırsız güç yok. Her beceri zincir uzunluğu kadar birim yiyor. Enerji
@@ -1767,10 +1786,15 @@ function spawnEnemy(){
     ss:Math.random()<0.5?-1:1,bob:Math.random()*6,pi:Math.floor(Math.random()*3)};
   pushOut(e,0.6);enemies.push(e);
 }
-/* Mermi artık element ve güç taşıyor: havada çarpışmayı bu ikisi çözüyor. */
+/* Mermi artık element ve güç taşıyor: havada çarpışmayı bu ikisi çözüyor.
+   menzil = merminin kat edebileceği YOL. life (4 sn) tek başına sınır sayılmaz:
+   yıldırım 4 sn'de 120 birim gidiyor, arena köşegeni 124 — yani hızlı element
+   haritayı geçiyor, yavaşı yarısını. Sınırı süreye bırakmak menzili elementin
+   hızına göre 40-120 arasında oynatıyordu; mesafeye bağlayınca beş elementin de
+   menzili aynı, aradaki fark hızda (=varış süresinde) kalıyor. */
 function fire(x,y,z,dx,dy,dz,el,guc,sahip,tgt){
   const sp=MU.ELEM[el].hiz;
-  shots.push({x,y,z,vx:dx*sp,vy:dy*sp,vz:dz*sp,el,guc,sahip,life:4,tgt,r:0.45});
+  shots.push({x,y,z,vx:dx*sp,vy:dy*sp,vz:dz*sp,el,guc,sahip,life:4,tgt,r:0.45,menzil:ATAK_BIRAK});
 }
 function boom(x,y,z,scale,color){ fx.push({x,y,z,t:0,scale,color}); }
 
@@ -1788,40 +1812,49 @@ const D=MU.yeniDizi();            /* mühür dizisi durumu — muhur.js yönetiy
    bedavaya biliniyordu ve pusuya sokulmak diye bir şey kalmıyordu. Üstelik
    kilidin kendisi ele veriyordu — kamerayı düşmana çeviren şey kilitti, yani
    arkadan yaklaşan düşmanı oyun oyuncuya kendi gösteriyordu.
-   Kilit üç şartı BİRDEN istiyor artık:
-     · menzil — dövüşebileceğin mesafede olacak (KILIT_MENZIL)
-     · görüş  — arada bina varsa kilit yok; siper gerçekten saklasın
+   Kilit üç şartı BİRDEN istiyor artık — hepsi tek soruya bakıyor: "şimdi ateş
+   etsem vurur muydum?"
+     · menzil — ATAK_MENZIL içinde olacak
+     · hat    — MERMİNİN GİDECEĞİ YOL açık olacak (bkz. atisHatti)
      · koni   — kameranın baktığı yönde olacak; arkadan sokulan kilitlenmez
-   Kopması bağlanmasından zor: KILIT_BIRAK mesafesine kadar ve görüş kısa süre
-   kesilse de sürüyor. Simetrik olsaydı düşman siperin kenarında her belirip
-   kaybolduğunda kilit ve onunla birlikte kamera titrerdi. */
-const KILIT_MENZIL=12;             /* bu mesafeye giren düşman kilitlenir */
-const KILIT_BIRAK=16;              /* histerezis: kilit ancak burada kopar */
+   Kopması: menzil ATAK_BIRAK'a kadar esniyor (histerezis, düşman bir adım geri
+   çekilince kilit düşmesin) ama HAT için pay yok. Araya bir obje girdiği anda
+   kilit kopuyor — vuramayacağın hedefe kilitli kalmak yalanın ta kendisi.
+   Anlık kopuş kamerayı titretmiyor: hat bir-iki kare kesilip yeniden açılırsa
+   aynı düşmana anında geri kilitleniyor ve kameranın zaman sabiti (~0.28 sn) o
+   aralığı zaten yutuyor. */
 const KILIT_KONI=Math.cos(1.05);   /* kameranın ±60°'si: "önümde" demek */
-/* Görüş kesilince hemen bırakmıyor. SIPER_TAVAN 1.2 sn olduğu için bu pay
-   düşmanın tam saklanmasını kilidi korumaya yetmiyor: siperden başka yerden
-   çıkabiliyor, yani siper hâlâ sürpriz üretiyor. */
-const KILIT_LOS_PAY=0.7;
+/* MERMİNİN HATTI, yerdeki görüş çizgisi DEĞİL. hasLOS 1.15 yüksekliğinde düz
+   bir çizgi bakıyor; mermi ise namludan (1.35) düşmanın göz hizasına eğik
+   gidiyor. Kilit "vuracak mıyım" sorusunun cevabıysa merminin kendi yolu
+   örneklenmeli. Adım 0.5: en hızlı mermi (yıldırım, 30 birim/sn) 60 fps'te
+   karede 0.5 birim ilerliyor, yani örnekleme merminin kendi çözünürlüğünde. */
+function atisHatti(e){
+  const sy=1.35, ey=eyOf(e);
+  const dx=e.x-P.x, dy=ey-sy, dz=e.z-P.z;
+  const d=Math.hypot(dx,dy,dz), n=Math.max(2,Math.ceil(d/0.5));
+  for(let i=1;i<n;i++){ const t=i/n;
+    if(pointBlocked(P.x+dx*t, sy+dy*t, P.z+dz*t)) return false; }
+  return true;
+}
 let LOCK=null;                     /* kilitli düşman */
-let lockLosKayip=0;                /* kilidin görüşten düştüğü süre (sn) */
-function updateLock(dt){
+function updateLock(){
   if(LOCK){
     const d=Math.hypot(LOCK.x-P.x,LOCK.z-P.z);
-    if(hasLOS(LOCK.x,LOCK.z,P.x,P.z,1.15)) lockLosKayip=0; else lockLosKayip+=dt;
     /* öldüyse enemies'ten çıkarılmış olur; bayat referansla kilitli kalmasın */
-    if(enemies.indexOf(LOCK)<0||d>KILIT_BIRAK||lockLosKayip>KILIT_LOS_PAY) LOCK=null;
+    if(enemies.indexOf(LOCK)<0||d>ATAK_BIRAK||!atisHatti(LOCK)) LOCK=null;
   }
   if(LOCK) return;                 /* kilit duruyorsa hedef değiştirme */
-  let best=null,bd=KILIT_MENZIL;
+  let best=null,bd=ATAK_MENZIL;
   const kx=Math.sin(camYaw),kz=Math.cos(camYaw);
   for(const e of enemies){
     const dx=e.x-P.x,dz=e.z-P.z,d=Math.hypot(dx,dz);
     if(d>bd) continue;
     if((dx*kx+dz*kz)/(d||1e-4) < KILIT_KONI) continue;      /* arkada/yanda: görmedin */
-    if(!hasLOS(e.x,e.z,P.x,P.z,1.15)) continue;             /* arada engel var */
+    if(!atisHatti(e)) continue;                             /* atış yolu kapalı */
     bd=d;best=e;
   }
-  if(best){ LOCK=best; lockLosKayip=0; }
+  LOCK=best;
 }
 const J={active:false,id:-1,ox:0,oy:0,dx:0,dy:0,max:52};
 
@@ -2037,7 +2070,7 @@ function ates(beceri){
 function alanAc(beceri){
   let hx,hz;
   if(LOCK){ hx=LOCK.x; hz=LOCK.z; }
-  else { hx=P.x+Math.sin(P.yaw)*8; hz=P.z+Math.cos(P.yaw)*8; }
+  else { hx=P.x+Math.sin(P.yaw)*ATAK_MENZIL; hz=P.z+Math.cos(P.yaw)*ATAK_MENZIL; }
   alanlar.push({x:hx,z:hz,t:beceri.gecikme,tam:beceri.gecikme,
                 r:beceri.yaricap,el:beceri.el,kat:beceri.kat,sahip:'oyuncu'});
   oyuncuAtti(beceri.el);
@@ -2279,7 +2312,11 @@ function updateEnemies(dt,now){
     /* Menzil bandı DARALTILDI. Eski 4.2-9.5 aralığında düşman yalnız dolanıyor,
        hiç yaklaşmıyordu; oyuncu 9 birim ötede siperin arkasındayken etrafında
        tur atıp duruyordu. Dar bant, atış menzilinde kalmaya zorluyor. */
-    const yakin=e.tip==='hayalet'?5.5:3.6, uzak=e.tip==='hayalet'?9:6.5;
+    /* ÜST BANT ARTIK MENZİLE BAĞLI. Hayaletin eski üst bandı 9'du; menzil 8'e
+       inince o mesafe "ateş edemediğim yer" oldu — hayalet orada tur atıp tek
+       atış yapamazdı. Bandın üstü menzilin içinde kalmalı, yoksa düşman kendi
+       menzilinin dışında dolanan bir hedef tahtasına dönüşüyor. */
+    const yakin=e.tip==='hayalet'?5.5:3.6, uzak=ATAK_MENZIL-(e.tip==='hayalet'?0.5:1.5);
     /* SİPER SÜRELİ. oyuncuHazir, oyuncu şarjlı beceriyi beklettiği SÜRECE doğru
        kalıyor (muhur.js'te şarjın zaman aşımı yok). Sınırsız bırakılınca döngü
        şu: siper → görüş kesilir → yaklas → görüş açılır → oyuncu hâlâ hazır →
@@ -2354,10 +2391,10 @@ function updateEnemies(dt,now){
     }
     /* TELEGRAF: atıştan TELEGRAF ms önce kol kalkar ve elde element rengi toplanır.
        Oyuncunun okuyup karşılık yetiştirebileceği pencere tam olarak burası. */
-    e.telegraf = (los&&d<DUSMAN_MENZIL) ? Math.max(0,1-Math.max(0,e.cd)/(TELEGRAF/1000)) : 0;
+    e.telegraf = (los&&d<ATAK_MENZIL) ? Math.max(0,1-Math.max(0,e.cd)/(TELEGRAF/1000)) : 0;
     e.arm += ((e.telegraf>0.02?1:0)-e.arm)*Math.min(1,dt*7);
 
-    if(e.cd<=0&&los&&d<DUSMAN_MENZIL){
+    if(e.cd<=0&&los&&d<ATAK_MENZIL){
       const my=muzzleY(e);
       let sx=P.x-e.x,sy=1.05-my,sz2=P.z-e.z;
       const sl=Math.hypot(sx,sy,sz2)||1;
@@ -2426,10 +2463,18 @@ function updateShots(dt){
       }
     }
     s.x+=s.vx*dt;s.y+=s.vy*dt;s.z+=s.vz*dt;s.life-=dt;
+    s.menzil-=Math.hypot(s.vx,s.vy,s.vz)*dt;      /* kat edilen yol menzilden düşüyor */
     const renk=MU.ELEM[s.el].renk;
     let dead=false;
+    /* MENZİL SONU. Çarpma değil sönme: patlama yarısı kadar, çünkü oyuncuya
+       "ıskaladın" değil "buraya kadar" demesi gerekiyor. Menzili görünür kılan
+       tek şey bu — sayı ekranda yazmıyor, oyuncu onu mermilerin nerede
+       söndüğünü görerek öğreniyor. */
+    if(s.menzil<=0){
+      boom(s.x,Math.max(0.2,s.y),s.z,0.5,renk);dead=true;
+    }
     /* siper: engel arkasına girmek delip geçen mermiden tek kaçış */
-    if(s.life<=0||s.y<0.06||s.y>8||pointBlocked(s.x,s.y,s.z)||Math.abs(s.x)>AR+1.5||Math.abs(s.z)>AR+1.5){
+    else if(s.life<=0||s.y<0.06||s.y>8||pointBlocked(s.x,s.y,s.z)||Math.abs(s.x)>AR+1.5||Math.abs(s.z)>AR+1.5){
       boom(s.x,Math.max(0.2,s.y),s.z,1.0,renk);dead=true;
     } else if(dost){
       for(let k=enemies.length-1;k>=0;k--){const e=enemies[k];
@@ -2991,17 +3036,18 @@ function cizDusmanCan(){
        haritanın öbür ucundakinin barı sisin içinden pırıl pırıl okunuyordu.
        Kilit kısıtlandıktan sonra düşmanın yerini asıl ele veren şey buydu.
        Görüş yoksa bar da yok — siper artık gerçekten saklıyor.
-       Telegraf yayı kaybolmuyor: düşman yalnız görüş varken ve DUSMAN_MENZIL
-       içinden ateş ediyor, yani atış gelirken bar hep ekranda. Sönümleme de o
-       menzile bağlı, sise değil: sisi ölçüt alsaydım (gece temasında 16) atış
-       menzilinin içinde kalan düşmanın telegrafı okunmaz olurdu. */
+       Telegraf yayı kaybolmuyor: düşman yalnız görüş varken ve ATAK_MENZIL (8)
+       içinden ateş ediyor, HUD_MENZIL ise 12 — yani atış gelirken bar hep
+       ekranda, üstelik dört birimlik payla. Sönümleme sise değil bu menzile
+       bağlı: sisi ölçüt alsaydım (gece temasında 16) sınır atış menzilinin çok
+       ötesinde kalır, HUD yine harita çapında radar gibi çalışırdı. */
     const dP=Math.hypot(e.x-P.x,e.z-P.z);
-    if(dP>DUSMAN_MENZIL+4) continue;
+    if(dP>HUD_MENZIL) continue;
     if(!hasLOS(e.x,e.z,P.x,P.z,1.15)) continue;
     const o=Math.max(0,e.can)/e.canMax;
     const w=56,h=6, x=p.x-w/2, y=p.y;
     const sol=Math.max(0.25,Math.min(1,14/p.z))            /* uzaktakiler sönükleşsin */
-             *Math.min(1,(DUSMAN_MENZIL+4-dP)/4);          /* menzil kenarında tamamen sön */
+             *Math.min(1,(HUD_MENZIL-dP)/4);               /* menzil kenarında tamamen sön */
     ctx.globalAlpha=sol;
     ctx.fillStyle=TEMA===TEMALAR.gece?'rgba(10,15,32,.78)':'rgba(255,255,255,.82)';
     ctx.beginPath();ctx.roundRect(x-2,y-2,w+4,h+4,5);ctx.fill();
@@ -3084,7 +3130,7 @@ function endGame(){
 function resetGame(){
   G.score=0;scoreEl.textContent='0';G.can=OY_CAN;canCiz();
   enemies.length=0;shots.length=0;fx.length=0;
-  LOCK=null;lockLosKayip=0;           /* ölen düşmana bayat kilitle başlama */
+  LOCK=null;                          /* ölen düşmana bayat kilitle başlama */
   P.x=0;P.z=0;P.yaw=0;P.targetYaw=0;kameraKur();
   G.enerji=EN_BAR; G.durgun=0; G.sarjEdiyor=false; G.enerjiUyari=0;
   alanlar.length=0;
@@ -3140,7 +3186,7 @@ function tick(){
   const now=performance.now();
   const dt=Math.min(0.05,(now-lastT)/1000);lastT=now;G.t=now;RDT=dt;
   if(G.running){
-    updateLock(dt);
+    updateLock();
     const pozId=readHand(now,dt*1000);
     updateSpell(pozId,dt*1000,now,sonYeni);
     updatePlayer(dt);
