@@ -69,12 +69,11 @@ for(let i=1;i<argv.length;i++){
    renk"i biz söylüyoruz — karakterde de aynı gerekçeyle böyle yapılmıştı.
    Değerler referans render'larından: krem sıva, koyu ahşap, arduvaz kiremit. */
 const PALET={
-  siva:   '#d6cfbd',
-  ahsap:  '#4a382a',
-  kiremit:'#46577a',
-  tas:    '#8d8a82',
+  govde:  '#c2b298',   /* sıva + ahşap tek gövde rengi: ikisinin arası sıcak taş */
+  kiremit:'#54678c',   /* ay ışığındaki arduvaz */
   fener:  '#ffcf7a',
 };
+const BOLGE_RENK=[PALET.govde, PALET.kiremit, PALET.fener];
 
 const klasorler=fs.readdirSync(kok).filter(d=>{
   const p=path.join(kok,d);
@@ -157,39 +156,53 @@ for(const ad of klasorler){
     while(lo<hi){ const m=(lo+hi)>>1; if(sirali[m]<l) lo=m+1; else hi=m; }
     return lo/(sirali.length||1);
   };
-  /* HİSTOGRAM GERME. Malzemeyi ADIYLA ayırmayı bıraktım: sıva ile ahşap
-     gölgede renk olarak ayırt edilemiyor (denendi, sıva payı %10 çıkıyordu,
-     render'larda duvarlar baskın). Ama atlasın GÖRELİ sıralaması doğru — sıva
-     ahşaptan gerçekten parlak, yalnız 255'in 14'üne sıkışmış. Sıralama
-     yüzdeliğe çevrilip albedo aralığına geriliyor: en koyu %20 griye, en açık
-     beyaza yakın. Böylece duvardaki kiriş deseni geri geliyor.
-     Renk tonu örnekten korunuyor, doygunluk bir miktar açılıyor — gece
-     pişirmesi maviyi de kısmış. */
-  /* DOYGUN 1.45 denendi: kiremit arduvaz yerine gök mavisi (#8bd7fc), ahşap
-     turuncu çıktı. Gece pişirmesi doygunluğu bir miktar kısıyor ama 1.45 fazla
-     telafi ediyor. TAVAN da 0.97'den düşürüldü — motor üstüne kendi ışığını ve
-     bloom'u ekliyor, beyaza yakın duvar patlıyordu. */
-  const GAMA=0.85, TABAN=0.20, TAVAN=0.88, DOYGUN=1.12;
-  function ac(c){
-    const sr=yuzde(lum(c));
-    const hedef=(TABAN+(TAVAN-TABAN)*Math.pow(sr,GAMA))*255;
-    const l=lum(c)||1;
-    const o3=[0,1,2].map(k=>{
-      const oran=c[k]/l;                        /* ton korunuyor */
-      return hedef*(1+(oran-1)*DOYGUN);
-    });
-    return o3.map(v=>Math.max(0,Math.min(255,v)));
-  }
-  const acikIx=[];
-  for(let i=0;i<o.f.length;i++) if(ucRenk[i]&&!parlak[i]) acikIx.push(i);
-  const acikRenk=new Map(acikIx.map(i=>[i,ac(ucRenk[i])]));
-  const merkez=kOrtalama(acikIx.map(i=>acikRenk.get(i)),K);
-  const K_FENER=K;
+  /* ============ İKİ BÖLGE: ÇATI ve GÖVDE (+ FENER) ============
+     Daha çok bölge DENENDİ ve ölçümle elendi. Sıra şöyleydi:
+       6 bölge → sınır kenarı 4048, sadeleştirici 1100 hedefine ulaşamıyor
+                 (3300'de takılıyor), duvarlar testere dişi çentiklerle
+                 kemirilmiş görünüyor
+       3 bölge → sınır 3285, hedefe ulaşıyor ama çentikler duruyor
+       2 bölge → sınır ~1000, hedef tam tutuyor, sınırlar tutarlı
+
+     Çentiklerin sebebi sadeleştirici değil ETİKET ALANI: atlas malzemeyi değil
+     YÜZEY DETAYINI kodluyor (sıvanın üstünde boyalı taş yamaları var) ve
+     sınıflandırıcı onları ayrı malzeme sanıyor. Komşuluk çoğunluğuyla
+     yumuşatma 4048'den 3285'e inip DOYUYOR — gürültü tuz-biber değil, gerçekten
+     ince ölçekte iç içe geçmiş. Yani bu atlastan temiz bir sıva/ahşap ayrımı
+     çıkmıyor; çıkarmaya çalışmak binayı parçalıyor.
+
+     Kiremit ise sağlam ayrışıyor: mavi baskınlığı ışıktan bağımsız ve çatı
+     mekânsal olarak bitişik tek bir yüzey. Fener de emissive maskesinden kesin
+     geliyor. Kalan her şey tek gövde rengi. */
+  /* KİREMİT = MAVİ **VE** YUKARI BAKAN.
+     Yalnız maviye bakmak yetmiyor: atlasta sıvanın üstünde mavimsi boyalı
+     yamalar var ve onlar da kiremit etiketi alıyordu. Duvarın ortasında
+     kalan o adacıklar sadeleştikten sonra havada duran koca levhalara
+     dönüşüyordu — "binadan çıkan sivri üçgenler" bunlardı.
+     Çatı, saçak ve sundurma yukarı bakar; duvar bakmaz. Geometrik kanıt
+     dokununkinden bağımsız ve ışıktan etkilenmiyor. */
+  const yuzNormalY=o.f.map(t=>{
+    const A=o.v[t[0][0]],B=o.v[t[1][0]],C=o.v[t[2][0]];
+    const ux=B[0]-A[0],uy=B[1]-A[1],uz=B[2]-A[2];
+    const vx=C[0]-A[0],vy=C[1]-A[1],vz=C[2]-A[2];
+    const ny=uz*vx-ux*vz;
+    const l=Math.hypot(uy*vz-uz*vy, ny, ux*vy-uy*vx)||1;
+    return ny/l;
+  });
+  const K_FENER=2;
   const etiket=new Array(o.f.length).fill(-1);
+  let maviAmaDik=0;
   for(let i=0;i<o.f.length;i++){
-    if(parlak[i]) etiket[i]=K_FENER;
-    else if(ucRenk[i]) etiket[i]=enYakin(acikRenk.get(i),merkez);
+    if(parlak[i]){ etiket[i]=K_FENER; continue; }
+    const c=ucRenk[i];
+    if(!c){ etiket[i]=-1; continue; }
+    const s=c[0]+c[1]+c[2]+1e-6;
+    const mavi=(c[2]/s - c[0]/s > 0.035);
+    const yukari=(yuzNormalY[i] > 0.15);
+    if(mavi&&!yukari) maviAmaDik++;
+    etiket[i]=(mavi&&yukari) ? 1 : 0;
   }
+  console.log(`  kiremit mavi ama dik olduğu için gövdeye alınan ${maviAmaDik} üçgen`);
   /* Bilinmeyenler: 3B'de en yakın etiketli üçgenden devral. Izgara kovalarıyla
      arama — 6000 bilinmeyen × 14000 bilinen kaba kuvvette 84M karşılaştırma. */
   {
@@ -226,8 +239,9 @@ for(const ad of klasorler){
      serpiştirilmiş tek tek üçgenler oluyor; sadeleştirici de komşusuz her
      üçgeni olduğu gibi bırakmak zorunda kalıyor ve bina "patlamış" görünüyor.
 
-     Çözüm komşuluk üzerinden çoğunluk oyu. Kendi oyu 2 sayılıyor: 1 sayılsaydı
-     ince ama GERÇEK ayrıntılar (kiriş, pervaz) komşularınca yutuluyordu. */
+     Çözüm komşuluk üzerinden çoğunluk oyu. Kendi oyu 1: ölçüldü, 2 iken
+     yumuşatma 3401 sınır kenarında duruyordu, 1 iken 3285'e iniyor. 12 turda
+     doyuyor, fazlası bir şey değiştirmiyor. */
   {
     const kenarUcgen=new Map();
     const vAnahtar=(vi)=>{const p=o.v[vi];return p[0].toFixed(5)+','+p[1].toFixed(5)+','+p[2].toFixed(5);};
@@ -257,11 +271,11 @@ for(const ad of klasorler){
       return (acik/top*100).toFixed(1);
     };
     const once=acikOran();
-    for(let tur=0;tur<4;tur++){
+    for(let tur=0;tur<12;tur++){
       const yeni=etiket.slice();
       for(let i=0;i<o.f.length;i++){
         if(etiket[i]===K_FENER) continue;        /* fener maskeden geldi, dokunma */
-        const oy=new Map([[etiket[i],2]]);       /* kendi oyu 2 */
+        const oy=new Map([[etiket[i],1]]);       /* kendi oyu 1 — ölçüldü */
         for(const k of komsu[i]){
           if(etiket[k]===K_FENER) continue;
           oy.set(etiket[k],(oy.get(etiket[k])||0)+1);
@@ -277,7 +291,13 @@ for(const ad of klasorler){
        ait olduğu için etrafı komple sınır oluyor — sınır uzunluğu patlıyor ve
        sadeleştirici hiçbir şeyi çökertemiyor. Bir eşiğin altındaki bağlı
        bileşen, en çok komşuluk ettiği etikete katılıyor. */
-    const ESIK=Math.max(30, Math.round(o.f.length*0.004));
+    /* EŞİK ÜÇGEN SAYISINA DEĞİL, ÖLÇÜYE BAĞLI.
+       Önce üçgen sayısı denendi ve yanlış şeyi kesti: bina3'ün çatısı az
+       üçgenli olduğu için komple yutuldu ve bina çatısız kaldı. Oysa çatı az
+       üçgenli olabilir ama GENİŞTİR; yutulması gereken şey duvara serpilmiş
+       küçük lekeler. O yüzden ölçüt bileşenin kapladığı hacmin köşegeni. */
+    const kutuKosegen=Math.hypot(mx[0]-mn[0], mx[1]-mn[1], mx[2]-mn[2]);
+    const ESIK_OLCU=kutuKosegen*0.13;
     let yutulan=0, bilesen=0;
     { const gorulen=new Uint8Array(o.f.length);
       for(let i=0;i<o.f.length;i++){
@@ -288,7 +308,10 @@ for(const ad of klasorler){
           for(const k of komsu[t]) if(!gorulen[k]&&etiket[k]===g){ gorulen[k]=1; yig.push(k); }
         }
         bilesen++;
-        if(uye.length>=ESIK) continue;
+        let bmn=[1e9,1e9,1e9], bmx=[-1e9,-1e9,-1e9];
+        for(const t of uye) for(const vi of o.f[t]) for(let k=0;k<3;k++){
+          const v=o.v[vi[0]][k]; if(v<bmn[k])bmn[k]=v; if(v>bmx[k])bmx[k]=v; }
+        if(Math.hypot(bmx[0]-bmn[0],bmx[1]-bmn[1],bmx[2]-bmn[2]) >= ESIK_OLCU) continue;
         const oy=new Map();
         for(const t of uye) for(const k of komsu[t])
           if(etiket[k]!==g&&etiket[k]!==K_FENER) oy.set(etiket[k],(oy.get(etiket[k])||0)+1);
@@ -300,7 +323,7 @@ for(const ad of klasorler){
       }
     }
     console.log(`  yumuşat açık kenar %${once} → %${acikOran()}`
-      +`  · ${bilesen} bileşen, ${yutulan} üçgen küçük adalardan yutuldu (eşik ${ESIK})`);
+      +`  · ${bilesen} bileşen, ${yutulan} üçgen küçük adalardan yutuldu (eşik ölçü ${ESIK_OLCU.toFixed(2)})`);
   }
 
   /* Örneklenen rengin p80'i — yalnız RAPOR için. Paletle karşılaştırıp
@@ -344,11 +367,11 @@ for(const ad of klasorler){
       for(const V of [A,B,C]){ p.push(V[0],V[1],V[2]); n.push(nx,ny,nz); }
       ix.push(t0,t0+1,t0+2);
     }
-    const renk = b===K_FENER ? PALET.fener : hex(merkez[b]);
+    const renk = BOLGE_RENK[b] || PALET.govde;
     bolgeler.push({renk, isik:b===K_FENER?1:0,
       p:p.map(v=>+v.toFixed(4)), n:n.map(v=>+v.toFixed(3)), i:ix});
     ciktiUcgen+=s.ucgen.length;
-    console.log(`  ${(b===K_FENER?'FENER':'bölge '+b).padEnd(8)} ${renk}  (ham ${hex(orneklenen(b))})`
+    console.log(`  ${['gövde','kiremit','FENER'][b].padEnd(8)} ${renk}  (ham ${hex(orneklenen(b))})`
       +`  ${String(s.ucgen.length).padStart(4)} üçgen`);
   }
   console.log(`  ÇIKTI   ${ciktiUcgen} üçgen (%${(ciktiUcgen/o.f.length*100).toFixed(1)}), ${bolgeler.length} çizim`);

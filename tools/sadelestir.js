@@ -89,7 +89,7 @@ function qEnIyi(q,p1,p2){
    iki yana kayiyor, aralarinda catlak aciliyor ve bina "patlamis" gorunuyor
    (cikti kenarlarinin %68'i acikti). Tek geciste sadelestirip sonra bolmek
    sinirlari birebir ayni konumda tutuyor. */
-function sadelestirQEM(pozGiris, ucgenGiris, hedef, etiketler){
+function sadelestirQEM(pozGiris, ucgenGiris, hedef, etiketler, sinirAgirlik){
   /* 1) KONUMA GÖRE KAYNAT. OBJ dosyaları UV/normal dikişlerinde aynı noktayı
      birden çok köşe olarak tutuyor; kaynatmazsak o dikişler "kenar" sanılıp
      hiç çökmüyor ve sadeleştirme duruyor. */
@@ -160,7 +160,13 @@ function sadelestirQEM(pozGiris, ucgenGiris, hedef, etiketler){
     if(!d) continue;
     let nx=ey*d[2]-ez*d[1], ny=ez*d[0]-ex*d[2], nz=ex*d[1]-ey*d[0];
     const nl=Math.hypot(nx,ny,nz)||1; nx/=nl;ny/=nl;nz/=nl;
-    const q=qDuzlem(nx,ny,nz,-(nx*A[0]+ny*A[1]+nz*A[2]), el*el*160);
+    /* SINIR CEZASI AYARLANABİLİR.
+       160 ile sınır neredeyse çivileniyordu. Malzeme etiketi dokudan geliyor ve
+       mekânsal olarak gürültülü, yani kiriş–sıva sınırı düz bir bant değil
+       testere dişi; ağır ceza o testere dişini olduğu gibi donduruyor ve duvar
+       kemirilmiş görünüyor. Düşük ceza sınırın KENDİ üzerinde sadeleşip
+       düzleşmesine izin veriyor — sınır sınır olarak kalıyor ama düzgünleşiyor. */
+    const q=qDuzlem(nx,ny,nz,-(nx*A[0]+ny*A[1]+nz*A[2]), el*el*(sinirAgirlik===undefined?160:sinirAgirlik));
     qTopla(Q[a],q); qTopla(Q[b],q);
   }
 
