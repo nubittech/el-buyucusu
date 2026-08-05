@@ -218,6 +218,91 @@ for(const ad of klasorler){
     if(cozulen) console.log(`  komşu   ${cozulen} bilinmeyen üçgen etiketlendi`);
   }
 
+  /* ================= ETİKET YUMUŞATMA =================
+     ÖLÇÜLDÜ: yumuşatma olmadan çıktı mesh'inin kenarlarının %68'i AÇIK, yani
+     tek üçgene komşu. Kapalı bir yüzeyde bu sıfıra yakın olmalı. Sebep şu:
+     malzeme kararı üçgen BAŞINA veriliyor ve doku gürültülü, dolayısıyla yan
+     yana iki üçgen farklı bölgeye düşüyor. Bölge bağlantılı bir yama değil,
+     serpiştirilmiş tek tek üçgenler oluyor; sadeleştirici de komşusuz her
+     üçgeni olduğu gibi bırakmak zorunda kalıyor ve bina "patlamış" görünüyor.
+
+     Çözüm komşuluk üzerinden çoğunluk oyu. Kendi oyu 2 sayılıyor: 1 sayılsaydı
+     ince ama GERÇEK ayrıntılar (kiriş, pervaz) komşularınca yutuluyordu. */
+  {
+    const kenarUcgen=new Map();
+    const vAnahtar=(vi)=>{const p=o.v[vi];return p[0].toFixed(5)+','+p[1].toFixed(5)+','+p[2].toFixed(5);};
+    const kAnahtar=(a,b)=>a<b?a+'|'+b:b+'|'+a;
+    o.f.forEach((t,ti)=>{
+      const k=[vAnahtar(t[0][0]),vAnahtar(t[1][0]),vAnahtar(t[2][0])];
+      for(const [x,y] of [[0,1],[1,2],[2,0]]){
+        const e=kAnahtar(k[x],k[y]);
+        if(!kenarUcgen.has(e)) kenarUcgen.set(e,[]);
+        kenarUcgen.get(e).push(ti);
+      }
+    });
+    const komsu=o.f.map(()=>[]);
+    for(const lst of kenarUcgen.values())
+      for(let a=0;a<lst.length;a++) for(let b=a+1;b<lst.length;b++){
+        komsu[lst[a]].push(lst[b]); komsu[lst[b]].push(lst[a]);
+      }
+    const acikOran=()=>{
+      let acik=0,top=0;
+      for(const [e,lst] of kenarUcgen){
+        const et=new Set(lst.map(t=>etiket[t]));
+        for(const g of et){
+          const n=lst.filter(t=>etiket[t]===g).length;
+          top++; if(n===1) acik++;
+        }
+      }
+      return (acik/top*100).toFixed(1);
+    };
+    const once=acikOran();
+    for(let tur=0;tur<4;tur++){
+      const yeni=etiket.slice();
+      for(let i=0;i<o.f.length;i++){
+        if(etiket[i]===K_FENER) continue;        /* fener maskeden geldi, dokunma */
+        const oy=new Map([[etiket[i],2]]);       /* kendi oyu 2 */
+        for(const k of komsu[i]){
+          if(etiket[k]===K_FENER) continue;
+          oy.set(etiket[k],(oy.get(etiket[k])||0)+1);
+        }
+        let en=etiket[i], eo=-1;
+        for(const [g,v] of oy) if(v>eo){ eo=v; en=g; }
+        yeni[i]=en;
+      }
+      for(let i=0;i<etiket.length;i++) etiket[i]=yeni[i];
+    }
+    /* KÜÇÜK ADALARI YUT. Çoğunluk oyu tek tek pikselleri düzeltiyor ama
+       20-30 üçgenlik lekeler ayakta kalıyor. Her leke ayrı bir çizim bölgesine
+       ait olduğu için etrafı komple sınır oluyor — sınır uzunluğu patlıyor ve
+       sadeleştirici hiçbir şeyi çökertemiyor. Bir eşiğin altındaki bağlı
+       bileşen, en çok komşuluk ettiği etikete katılıyor. */
+    const ESIK=Math.max(30, Math.round(o.f.length*0.004));
+    let yutulan=0, bilesen=0;
+    { const gorulen=new Uint8Array(o.f.length);
+      for(let i=0;i<o.f.length;i++){
+        if(gorulen[i]||etiket[i]===K_FENER) continue;
+        const g=etiket[i], yig=[i], uye=[]; gorulen[i]=1;
+        while(yig.length){
+          const t=yig.pop(); uye.push(t);
+          for(const k of komsu[t]) if(!gorulen[k]&&etiket[k]===g){ gorulen[k]=1; yig.push(k); }
+        }
+        bilesen++;
+        if(uye.length>=ESIK) continue;
+        const oy=new Map();
+        for(const t of uye) for(const k of komsu[t])
+          if(etiket[k]!==g&&etiket[k]!==K_FENER) oy.set(etiket[k],(oy.get(etiket[k])||0)+1);
+        let en=-1, eo=0;
+        for(const [gg,v] of oy) if(v>eo){ eo=v; en=gg; }
+        if(en<0) continue;
+        for(const t of uye) etiket[t]=en;
+        yutulan+=uye.length;
+      }
+    }
+    console.log(`  yumuşat açık kenar %${once} → %${acikOran()}`
+      +`  · ${bilesen} bileşen, ${yutulan} üçgen küçük adalardan yutuldu (eşik ${ESIK})`);
+  }
+
   /* Örneklenen rengin p80'i — yalnız RAPOR için. Paletle karşılaştırıp
      seçimin gerçekten malzemeye denk düştüğünü görmek istiyorum. */
   function orneklenen(b){
@@ -227,19 +312,24 @@ for(const ad of klasorler){
     orn.sort((a,c)=>(a[0]+a[1]+a[2])-(c[0]+c[1]+c[2]));
     return orn[Math.min(orn.length-1, Math.floor(orn.length*0.80))];
   }
+  /* TEK GEÇİŞTE SADELEŞTİR, SONRA BÖL.
+     Bölge başına ayrı çağrı yapılıyordu ve ortak sınırlar birbirinden bağımsız
+     kayıp çatlak açıyordu. Artık mesh bir bütün olarak sadeleşiyor, etiket de
+     kısıt olarak veriliyor: sınır köşeleri sınırda kalıyor, iki taraf AYNI
+     konumu paylaşmaya devam ediyor. */
+  const ucV=o.f.map(t=>[t[0][0],t[1][0],t[2][0]]);
+  const sTum=sadelestirQEM(o.v, ucV, HEDEF, etiket);
+  const sapTum=sapmaOlc(ucV, o.v, sTum.poz);
+  console.log(`  sadeleş ${o.f.length} → ${sTum.ucgen.length} üçgen`
+    +`  · sapma ort %${(sapTum.ortalama/boy*100).toFixed(2)} en kötü %${(sapTum.enKotu/boy*100).toFixed(1)}`
+    +`  · ters dönme engelledi ${sTum.atlanan}`);
+
   const bolgeler=[];
   let ciktiUcgen=0;
   for(let b=0;b<=K_FENER;b++){
-    /* objOku üçgenleri köşe başına [v,vt,vn] üçlüsü tutuyor; sadeleştirme
-       yalnız konumla ilgilendiği için ham köşe indeksine indiriliyor. */
-    const alt=o.f.filter((_,i)=>etiket[i]===b).map(t=>[t[0][0],t[1][0],t[2][0]]);
+    const alt=sTum.ucgen.filter((_,i)=>sTum.etiket[i]===b);
     if(!alt.length) continue;
-    /* Hücre boyu bölgenin kendi hedefine göre: büyük bölge kaba, küçük bölge
-       ince kümelenmeli, yoksa fener/tabela gibi ufak parçalar tamamen siliniyor. */
-    const pay=alt.length/o.f.length;
-    const hedefB=Math.max(24, Math.round(HEDEF*pay));
-    const s=sadelestirQEM(o.v, alt, hedefB);
-    const sap=sapmaOlc(alt, o.v, s.poz);
+    const s={poz:sTum.poz, ucgen:alt};
     /* düz gölgeleme: üçgen başına kendi yüz normali. Kümeleme sonrası
        normalleri ortalamak çatı kenarlarını yuvarlayıp eritiyordu; yüz normali
        hem keskin kalıyor hem oyunun bantlı guaj üslubuna oturuyor. */
@@ -259,8 +349,7 @@ for(const ad of klasorler){
       p:p.map(v=>+v.toFixed(4)), n:n.map(v=>+v.toFixed(3)), i:ix});
     ciktiUcgen+=s.ucgen.length;
     console.log(`  ${(b===K_FENER?'FENER':'bölge '+b).padEnd(8)} ${renk}  (ham ${hex(orneklenen(b))})`
-      +`  ${String(alt.length).padStart(5)} → ${String(s.ucgen.length).padStart(4)} üçgen  %${(alt.length/o.f.length*100).toFixed(0).padStart(2)}`
-      +`  sapma ort ${(sap.ortalama/boy*100).toFixed(2)}% en kötü ${(sap.enKotu/boy*100).toFixed(1)}%`);
+      +`  ${String(s.ucgen.length).padStart(4)} üçgen`);
   }
   console.log(`  ÇIKTI   ${ciktiUcgen} üçgen (%${(ciktiUcgen/o.f.length*100).toFixed(1)}), ${bolgeler.length} çizim`);
 

@@ -83,7 +83,13 @@ function qEnIyi(q,p1,p2){
 /* pozisyonlar: [[x,y,z],...] · ucgenler: [[i,j,k],...] (poz indeksleri)
    hedef: istenen üçgen sayısı
    döner: {poz, ucgen} — sadeleştirilmiş */
-function sadelestirQEM(pozGiris, ucgenGiris, hedef){
+/* etiketler (istege bagli): ucgen basina bolge numarasi.
+   Verilirse KOSE ETIKET KUMESI hesaplanip iki ucu FARKLI kumeye sahip kenarlar
+   cokertilmiyor. Sebep olculdu: bolgeler ayri ayri sadelestirilince ortak sinir
+   iki yana kayiyor, aralarinda catlak aciliyor ve bina "patlamis" gorunuyor
+   (cikti kenarlarinin %68'i acikti). Tek geciste sadelestirip sonra bolmek
+   sinirlari birebir ayni konumda tutuyor. */
+function sadelestirQEM(pozGiris, ucgenGiris, hedef, etiketler){
   /* 1) KONUMA GÖRE KAYNAT. OBJ dosyaları UV/normal dikişlerinde aynı noktayı
      birden çok köşe olarak tutuyor; kaynatmazsak o dikişler "kenar" sanılıp
      hiç çökmüyor ve sadeleştirme duruyor. */
@@ -95,8 +101,14 @@ function sadelestirQEM(pozGiris, ucgenGiris, hedef){
     if(j===undefined){ j=poz.length; anahtar.set(k,j); poz.push([p[0],p[1],p[2]]); }
     eslem[i]=j;
   }
-  let ucgen=ucgenGiris.map(t=>[eslem[t[0]],eslem[t[1]],eslem[t[2]]])
-                      .filter(t=>t[0]!==t[1]&&t[1]!==t[2]&&t[0]!==t[2]);
+  const gecerli=[];
+  let ucgen=[];
+  ucgenGiris.forEach((t,i)=>{
+    const o=[eslem[t[0]],eslem[t[1]],eslem[t[2]]];
+    if(o[0]===o[1]||o[1]===o[2]||o[0]===o[2]) return;
+    ucgen.push(o); gecerli.push(etiketler?etiketler[i]:0);
+  });
+  const etiket=gecerli;
 
   const N=poz.length;
   const Q=Array.from({length:N},qSifir);
@@ -152,6 +164,16 @@ function sadelestirQEM(pozGiris, ucgenGiris, hedef){
     qTopla(Q[a],q); qTopla(Q[b],q);
   }
 
+  /* KÖŞE ETİKET MASKESİ: köşeye değen üçgenlerin bölgeleri, bit maskesi olarak.
+     Aynı maskeye sahip iki köşe aynı sınır boyunca ilerliyor demektir ve
+     birbirine çökebilir — sınır sadeleşir ama sınır olarak KALIR. Farklı maske
+     ise iki farklı malzeme sınırının kesişimi; orası kilitleniyor. */
+  const maske=new Int32Array(N);
+  if(etiketler) ucgen.forEach((t,ti)=>{
+    const bit=1<<Math.min(30,etiket[ti]);
+    for(const v of t) maske[v]|=bit;
+  });
+
   /* 3) ÇÖKERTME DÖNGÜSÜ */
   const olu=new Uint8Array(N);
   const surum=new Int32Array(N);               /* köşe her değiştiğinde artıyor */
@@ -171,6 +193,7 @@ function sadelestirQEM(pozGiris, ucgenGiris, hedef){
     const e=yigin.al();
     if(olu[e.a]||olu[e.b]) continue;
     if(e.sa!==surum[e.a]||e.sb!==surum[e.b]) continue;   /* bayat kayıt */
+    if(etiketler && maske[e.a]!==maske[e.b]) continue;   /* bölge sınırı kilidi */
     /* ters dönme denetimi: b'yi a'ya katlayınca hiçbir üçgen ters dönmemeli */
     const etkilenen=new Set([...komsuUcgen[e.a],...komsuUcgen[e.b]]);
     let iyi=true;
@@ -211,7 +234,7 @@ function sadelestirQEM(pozGiris, ucgenGiris, hedef){
   /* 4) TOPLA */
   const yeniIx=new Int32Array(N).fill(-1);
   const cPoz=[];
-  const cUcgen=[];
+  const cUcgen=[], cEtiket=[];
   ucgen.forEach((t,ti)=>{
     if(ucgenOlu[ti]) return;
     if(t[0]===t[1]||t[1]===t[2]||t[2]===t[0]) return;
@@ -219,9 +242,9 @@ function sadelestirQEM(pozGiris, ucgenGiris, hedef){
       if(yeniIx[v]<0){ yeniIx[v]=cPoz.length; cPoz.push(poz[v]); }
       return yeniIx[v];
     });
-    cUcgen.push(o);
+    cUcgen.push(o); cEtiket.push(etiket[ti]);
   });
-  return {poz:cPoz, ucgen:cUcgen, sinirSayi, atlanan};
+  return {poz:cPoz, ucgen:cUcgen, etiket:cEtiket, sinirSayi, atlanan};
 }
 
 module.exports={sadelestirQEM};
