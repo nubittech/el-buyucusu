@@ -113,7 +113,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v8.8 · animasyon · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v8.9 · düşman · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -217,7 +217,7 @@ const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById(
 const enBarEl=document.getElementById('enBar'), enWrapEl=document.getElementById('enWrap'), enLblEl=document.getElementById('enLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v8.8 · animasyon · motor hazır ✓';
+document.getElementById('subLine').textContent='v8.9 · düşman · motor hazır ✓';
 
 let W=innerWidth,H=innerHeight,DPR=Math.min(devicePixelRatio||1,2);
 const FOV=1.05; /* ~60° dikey */
@@ -2044,6 +2044,12 @@ function updateEnemies(dt,now){
       e.x+=sx2*adim; e.z+=sz2*adim;
     }
     pushOut(e,0.6);
+    /* KOŞU ANİMASYONU İÇİN GERÇEK HIZ. e.sp "istenen" hız; yönlendirme, engel
+       itmesi ve sıkışma onu düşürüyor. Ayak kaymasını sıfırlayan şey kat edilen
+       yol, o yüzden yer değiştirmeden ölçülüyor. Yumuşatma tek karelik
+       takılmaların bacakları zıplatmasını engelliyor. */
+    { const ger=Math.hypot(e.x-onceX,e.z-onceZ)/Math.max(dt,1e-4);
+      e.gercekHiz=(e.gercekHiz||0)+(ger-(e.gercekHiz||0))*Math.min(1,dt*8); }
     /* İçbükey bir cepte açgözlü yönlendirme her karede aynı kararı verip
        kilitlenebiliyor. İlerleme durduğunda bir yana kilitlenip yarım saniye
        o yönü sürdürmek döngüyü kırıyor. Ölçüm (4000 rota, gerçek yerleşim):
@@ -2260,6 +2266,8 @@ fetch('assets/karakter.json').then(r=>r.ok?r.json():null).then(j=>{
     kuresel:new Float32Array(nK*16),
     kemikDizi:new Float32Array(DERI_KEMIK*16),
     elIx:j.iskelet.findIndex(k=>/LeftHand$/.test(k.ad)),
+    omuzIx:j.iskelet.findIndex(k=>/LeftShoulder$/.test(k.ad)),
+    kafaIx:j.iskelet.findIndex(k=>/HeadTop_End$/.test(k.ad)),
     kosuW:0, zBosta:0, zKosu:0
   };
   console.log(`MODEL: ${MODEL.parca.length} bölge, ${nK} kemik, `
@@ -2369,6 +2377,24 @@ function deriCiz(md,mm,palet){
    Oran hıza DOĞRUSAL bağlı olduğu için her hızda kayma sıfıra iniyor.
    Oyuncu hızı (updatePlayer'daki 6.4) değişirse bu sayı da değişmeli. */
 const KOSU_ORAN=6.4/4.43;                  /* = 1.445 */
+const MODEL_OLCEK=()=>1.85/MODEL.boy;
+/* Pozu PAYLAŞILAN çalışma tamponlarına kurar. Oyuncu ve düşmanlar aynı
+   tamponları sırayla kullanıyor; deriCiz uniformları hemen yüklediği için
+   sorun çıkmıyor, ama her pozKur'dan sonra çizim ARADA olmalı — iki poz
+   üst üste kurulursa ilki kaybolur. */
+function pozKur(zBosta,zKosu,kosuW){
+  const A=MODEL.anim.bosta, B=MODEL.anim.kosu||MODEL.anim.bosta;
+  animOrnek(A,zBosta,MODEL.qA,MODEL.tA);
+  animOrnek(B,zKosu,MODEL.qB,MODEL.tB);
+  animHarman(MODEL.qA,MODEL.tA,MODEL.qB,MODEL.tB,kosuW,MODEL.q,MODEL.t,MODEL.iskelet.length);
+  iskeletCoz(MODEL);
+}
+/* Bir kemiğin model uzayındaki konumu (ölçek uygulanmış) — el, kafa, omuz gibi
+   yerlere efekt takmak için. pozKur'dan SONRA çağrılmalı. */
+function kemikYer(ix,sc){
+  const G=MODEL.kuresel, i=ix*16;
+  return {x:G[i+12]*sc, y:G[i+13]*sc, z:G[i+14]*sc};
+}
 function drawWizard(now,dt){ /* NINJA */
   const hizOran=J.active?Math.min(1,Math.hypot(J.dx,J.dy)/J.max):0;
   const moving=J.active&&Math.hypot(J.dx,J.dy)>5;
@@ -2383,20 +2409,15 @@ function drawWizard(now,dt){ /* NINJA */
        Tek saatte paylaşınca yavaş yürürken boşta da ağır çekim oluyordu. */
     MODEL.zBosta+=dt;
     MODEL.zKosu+=dt*KOSU_ORAN*Math.max(hizOran,0.25);
-    const A=MODEL.anim.bosta, B=MODEL.anim.kosu||MODEL.anim.bosta;
-    const n=MODEL.iskelet.length;
-    animOrnek(A,MODEL.zBosta,MODEL.qA,MODEL.tA);
-    animOrnek(B,MODEL.zKosu,MODEL.qB,MODEL.tB);
-    animHarman(MODEL.qA,MODEL.tA,MODEL.qB,MODEL.tB,MODEL.kosuW,MODEL.q,MODEL.t,n);
-    iskeletCoz(MODEL);
-    const sc=1.85/MODEL.boy;
+    pozKur(MODEL.zBosta,MODEL.zKosu,MODEL.kosuW);
+    const sc=MODEL_OLCEK();
     const pm=M(mT(P.x,0,P.z),mRy(P.yaw),mRx(MODEL.kosuW*0.10));
     deriCiz(MODEL,M(pm,mS(sc,sc,sc)),null);
     /* El konumu KEMİKTEN okunuyor: beceri küresi elde duruyor ve animasyonla
        birlikte hareket ediyor. Sabit noktaya bağlıyken kol sallanırken küre
        havada asılı kalıyordu. */
-    const G=MODEL.kuresel, i=MODEL.elIx*16;
-    h=MODEL.elIx>=0?{hx:G[i+12]*sc,hy:G[i+13]*sc,hz:G[i+14]*sc}:{hx:0.42,hy:1.15,hz:0.10};
+    const el=MODEL.elIx>=0?kemikYer(MODEL.elIx,sc):{x:0.42,y:1.15,z:0.10};
+    h={hx:el.x,hy:el.y,hz:el.z};
     drawWizardEk(pm,h,now);
     return;
   }
@@ -2423,27 +2444,89 @@ const NPAL=[
   {SUIT:0x5e1626,DARK:0x350d18,ACC:0xff5a3c,SKIN:0xc9a888,GOLD:0xd8a23c,EYE:0xffb64a,eyeGlow:1,horns:true},
   {SUIT:0x14402f,DARK:0x0a2418,ACC:0x7cff5a,SKIN:0xbfae90,GOLD:0xc9d84a,EYE:0xaaff66,eyeGlow:1,horns:true},
   {SUIT:0x3b1a5e,DARK:0x220e38,ACC:0xff7de8,SKIN:0xc7b0c9,GOLD:0xd8a2e0,EYE:0xff8ae6,eyeGlow:1,horns:true}];
+/* Derili modelin düşman paletleri — bölge sırası parlaklığa göre:
+   saç → ten → kumaş açık → kumaş orta → kumaş koyu.
+   Silüet artık oyuncuyla AYNI (tek geometri, tek iskelet), o yüzden ayrımı
+   tamamen renk taşıyor: oyuncu soğuk lacivert, düşmanlar sıcak-doygun. */
+const NMODEL_PALET=[
+  [0xe8c9a0,0xc9a888,0x8e2436,0x5e1626,0x2e0910],   /* kızıl oni */
+  [0xd8e8b0,0xbfae90,0x1f6b4a,0x14402f,0x07200f],   /* zehir     */
+  [0xf0c8dc,0xc7a0b4,0x9c1f70,0x62104a,0x2a0620],   /* eflatun   */
+];
+/* Eflatun MORDAN alındı: 0x3b1a5e gece ışığında oyuncunun 0x2a3160
+   laciverdiyle neredeyse aynı okunuyordu. Primitif ninjada boynuz ve parlayan
+   göz farkı taşıyordu; tek geometriye geçince o dayanak kalmadı, ayrımın
+   tamamı TON'a bindi. Üç düşman da sıcak tarafta, oyuncu tek başına soğukta. */
+/* Usta iki element arasında geçiş yapıyor. Hangisinde olduğu UZAKTAN okunmalı;
+   yoksa oyuncu ancak telegraf başlayınca öğreniyor ve TELEGRAF penceresi
+   karşılık hazırlamaya yetmiyor. En açık bölge elementin rengine boyanıyor. */
+function ustaPalet(e){
+  const p=NMODEL_PALET[e.pi%NMODEL_PALET.length].slice();
+  p[0]=MU.ELEM[e.el].renk;
+  return p;
+}
 /* düşman merkez yüksekliği — güdüm, isabet testi ve çizim AYNI değeri okumalı.
    Hayalet süzülür (yüksek, yavaş salınır), ninja yerde koşar (alçak, hızlı seker). */
 function ninjaStride(e){ return e.bob*2.4; }                        /* koşu fazı */
-function ninjaBobY(e){ return Math.abs(Math.sin(ninjaStride(e)))*0.07; } /* her adımda seker */
+/* Derili modelde sekme ANİMASYONUN kalça kanalında; prosedürel olanı üstüne
+   eklemek iki kat sallanma yapar. Sıfırlamak eyOf'u da sabitliyor ve güdüm /
+   isabet / çizim üçlüsü aynı değeri okumaya devam ediyor. */
+function ninjaBobY(e){ return MODEL ? 0 : Math.abs(Math.sin(ninjaStride(e)))*0.07; }
 function eyOf(e){ return e.kind==='ninja' ? 1.02+ninjaBobY(e) : 1.2+Math.sin(e.bob)*0.15; }
-/* ninja atışını elinden çıkarır, hayalet gövdesinden */
-function muzzleY(e){ return e.kind==='ninja' ? 1.45 : 1.2; }
+/* Ninja atışını ELİNDEN çıkarır, hayalet gövdesinden.
+   e.elY çizim sırasında el kemiğinden yazılıyor (bir kare gecikmeli — atış
+   updateEnemies'te, çizimden önce doğuyor; 16 ms'lik fark görünmüyor).
+   Sabit 1.45 kalsaydı telegraf küresi elde toplanıp mermi 0.6 birim yukarıdan
+   çıkardı; oyuncu neye baktığını şaşırır. */
+function muzzleY(e){ return e.kind==='ninja' ? (e.elY!==undefined?e.elY+0.14:1.45) : 1.2; }
 function drawEnemies(now){
   for(const e of enemies){
     const yaw=Math.atan2(P.x-e.x,P.z-e.z);
     if(e.kind==='ninja'){
-      const run=Math.sin(ninjaStride(e));
-      const nm=M(mT(e.x,ninjaBobY(e),e.z),mRy(yaw),mRx(0.12));
-      const pal=e.tip==='usta'
-        ? {...NPAL[e.pi],ACC:MU.ELEM[e.el].renk,GOLD:0xffd166,eyeGlow:1,EYE:MU.ELEM[e.el].renk}
-        : NPAL[e.pi];
-      const h=drawNinja(nm,pal,run,e.arm,e.bob*0.55);
-      if(e.tip==='usta'){                       /* usta: omuz üstünde iki yüzen küre */
-        for(const yon of [-1,1])
-          draw(GEO.sph,M(nm,mT(yon*0.5,1.75+Math.sin(now*0.004+yon)*0.06,0),mS(0.13,0.13,0.13)),
-               MU.ELEM[e.el].renk,1);
+      let nm,h;
+      if(MODEL){
+        /* Her düşmanın KENDİ saati var; ortak saat kullanınca hepsi aynı ayakla
+           adım atıyor. Doğuşta rastgele faz veriliyor (aşağıda, ilk çizimde). */
+        if(e.zBosta===undefined){ e.zBosta=Math.random()*MODEL.anim.bosta.sure;
+                                  e.zKosu=Math.random()*(MODEL.anim.kosu||MODEL.anim.bosta).sure;
+                                  e.kosuW=0; }
+        const hiz=e.gercekHiz||0;
+        const oran=Math.min(1,hiz/6.4);        /* oyuncunun tam hızına göre */
+        e.kosuW+=((hiz>0.4?1:0)-e.kosuW)*Math.min(1,RDT*9);
+        e.zBosta+=RDT;
+        e.zKosu+=RDT*KOSU_ORAN*Math.max(oran,0.25);
+        pozKur(e.zBosta,e.zKosu,e.kosuW);
+        const sc=MODEL_OLCEK();
+        nm=M(mT(e.x,0,e.z),mRy(yaw),mRx(e.kosuW*0.10));
+        deriCiz(MODEL,M(nm,mS(sc,sc,sc)),
+                e.tip==='usta'?ustaPalet(e):NMODEL_PALET[e.pi%NMODEL_PALET.length]);
+        const el=MODEL.elIx>=0?kemikYer(MODEL.elIx,sc):{x:-0.4,y:1.0,z:0.2};
+        h={hx:el.x,hy:el.y,hz:el.z};
+        /* Can barı KAFA KEMİĞİNDEN. Sabit 2.15 primitif ninjaya göreydi;
+           model çömelik ninja duruşunda durduğu için kafa tepesi 1.47'ye
+           (koşarken 1.35'e) iniyor ve bar 0.7 birim havada asılı kalıyordu. */
+        if(MODEL.kafaIx>=0) e.tepeY=kemikYer(MODEL.kafaIx,sc).y+0.30;
+        e.elY=el.y;                              /* muzzleY bunu okuyor */
+        if(e.tip==='usta'&&MODEL.omuzIx>=0){   /* usta: omuz üstünde iki yüzen küre */
+          const om=kemikYer(MODEL.omuzIx,sc);
+          for(const yon of [-1,1])
+            /* ±0.30: 1.85 boyunda omuz genişliği ~0.45, ±0.42 gövdeden kopuk
+               duruyordu */
+            draw(GEO.sph,M(nm,mT(yon*0.30,om.y+0.30+Math.sin(now*0.004+yon)*0.06,0),
+                 mS(0.12,0.12,0.12)),MU.ELEM[e.el].renk,1);
+        }
+      } else {
+        const run=Math.sin(ninjaStride(e));
+        nm=M(mT(e.x,ninjaBobY(e),e.z),mRy(yaw),mRx(0.12));
+        const pal=e.tip==='usta'
+          ? {...NPAL[e.pi],ACC:MU.ELEM[e.el].renk,GOLD:0xffd166,eyeGlow:1,EYE:MU.ELEM[e.el].renk}
+          : NPAL[e.pi];
+        h=drawNinja(nm,pal,run,e.arm,e.bob*0.55);
+        if(e.tip==='usta'){
+          for(const yon of [-1,1])
+            draw(GEO.sph,M(nm,mT(yon*0.5,1.75+Math.sin(now*0.004+yon)*0.06,0),mS(0.13,0.13,0.13)),
+                 MU.ELEM[e.el].renk,1);
+        }
       }
       /* TELEGRAF: atıştan önce elde elementin rengi toplanır — oyuncunun
          hangi elementin geldiğini okuyup karşılık hazırlaması bu pencerede olur */
@@ -2551,7 +2634,9 @@ function render(now){
   }
   /* kilit göstergesi: hedefin üstünde inen ok + zeminde halka */
   if(LOCK){
-    const ly=2.55+Math.sin(now*0.006)*0.12;
+    /* 2.55 primitif ninjanın boyuna göreydi; derili model çömelik durduğu için
+       ok can barının bir hayli üstünde kalıyordu. Barla aynı kemiğe bağlandı. */
+    const ly=(LOCK.tepeY!==undefined?LOCK.tepeY+0.45:2.55)+Math.sin(now*0.006)*0.12;
     draw(GEO.cone,M(mT(LOCK.x,ly,LOCK.z),mRx(Math.PI),mS(0.45,0.55,0.45)),0xff8f5e,1,0.75);
     draw(GEO.torus,M(mT(LOCK.x,0.12,LOCK.z),mS(2.4,1.4,2.4)),0xff8f5e,1,0.4);
   }
@@ -2581,7 +2666,9 @@ function dunyaEkran(x,y,z){
 /* düşmanın başının üstünde can barı + elementi */
 function cizDusmanCan(){
   for(const e of enemies){
-    const tepe=(e.kind==='ninja'?2.15:eyOf(e)+1.15);
+    /* e.tepeY derili modelde her karede kafa kemiğinden yazılıyor; yoksa
+       primitif ninjanın sabit yüksekliğine düşülüyor. */
+    const tepe=e.tepeY!==undefined?e.tepeY:(e.kind==='ninja'?2.15:eyOf(e)+1.15);
     const p=dunyaEkran(e.x,tepe,e.z); if(!p) continue;
     const o=Math.max(0,e.can)/e.canMax;
     const w=56,h=6, x=p.x-w/2, y=p.y;
