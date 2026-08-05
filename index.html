@@ -381,6 +381,11 @@ uniform sampler2D uZeminA, uZeminB;
 uniform float uZeminGuc, uZeminOlcek;
 uniform vec3 uIzgara;      /* .x başlangıç, .y adım (blok+sokak), .z sokak genişliği */
 uniform vec2 uTon;         /* gölge tabanı, ışık genliği — temadan */
+/* BİNA ATLASI. Renk bölgesi bölmesinin alternatifi: taban rengi doğrudan
+   modelin kendi dokusundan. Pencere, kafes, ahşap deseni ve sancaktaki arma
+   BOYALI olduğu için üçgen sayısından bağımsız olarak düzgün kalıyor. */
+uniform sampler2D uAtlas; uniform float uAtlasGuc;
+varying vec2 vT2;
 /* GUAJ GÖRÜNÜMÜ — doku yok, üç şeyle yapılıyor:
    1) BANTLAMA: sürekli gradyan yerine üç ton kademesi. Suluboya/guaj resimlerde
       ton grupları düz durur, aradaki geçiş dardır.
@@ -431,7 +436,10 @@ void main(){
   /* Doku uColor'ın YERİNE geçiyor, üstüne değil: bantlama, sıcak-soğuk kayması
      ve sis olduğu gibi kalsın diye taban rengi değiştiriliyor. */
   vec3 taban=uColor;
-  if(uZeminGuc>0.001){
+  if(uAtlasGuc>0.001){
+    taban=texture2D(uAtlas,vT2).rgb;
+  }
+  else if(uZeminGuc>0.001){
     vec2 uv=vW.xz*uZeminOlcek;
     vec3 sokak=texture2D(uZeminA,uv).rgb;
     vec3 avlu =texture2D(uZeminB,uv*0.79).rgb;
@@ -489,13 +497,18 @@ void main(){
 }`;
 const SAHNE_U=['uM','uV','uPr','uColor','uEmiss','uAlpha','uCam','uFogCol','uFogR','uLight',
                'uWarm','uCool','uFirca','uFircaOlcek','uKar','uKarRenk','uParilti','uDoku',
-               'uZeminA','uZeminB','uZeminGuc','uZeminOlcek','uIzgara','uTon'];
+               'uZeminA','uZeminB','uZeminGuc','uZeminOlcek','uIzgara','uTon',
+               'uAtlas','uAtlasGuc'];
 const prog=GL.createProgram();
 GL.attachShader(prog,sh(GL.VERTEX_SHADER,`
 attribute vec3 aP; attribute vec3 aN;
 uniform mat4 uM,uV,uPr;
 varying vec3 vN; varying vec3 vW;
-void main(){ vec4 w=uM*vec4(aP,1.0); vW=w.xyz; vN=mat3(uM)*aN; gl_Position=uPr*uV*w; }`));
+/* vT2 paylaşılan parça gölgelendiricisinde bildirilmiş; bildirilip beslenmeyen
+   varying bağlantı hatası veriyor, kullanmayan programlar sıfırlıyor */
+varying vec2 vT2;
+void main(){ vec4 w=uM*vec4(aP,1.0); vW=w.xyz; vN=mat3(uM)*aN; vT2=vec2(0.0);
+             gl_Position=uPr*uV*w; }`));
 GL.attachShader(prog,sh(GL.FRAGMENT_SHADER,FS_SAHNE));
 /* Konumlar ELLE sabitleniyor: iki program aynı tamponları paylaşıyor, derleyici
    aP/aN'ye farklı yuva verirse hangi dizinin açık kalacağı programa göre
@@ -528,6 +541,7 @@ function sahneSabitleri(u){
   GL.uniform1i(u.uZeminA,4); GL.uniform1i(u.uZeminB,5);
   GL.uniform1f(u.uZeminGuc,0); GL.uniform1f(u.uZeminOlcek,0.085);
   GL.uniform2f(u.uTon,...TEMA.ton);
+  GL.uniform1i(u.uAtlas,6); GL.uniform1f(u.uAtlasGuc,0);
   /* Ölçekler KABALAŞTIRILDI. 0.42 ince katmanı 2.4 birimde bir tekrarlıyordu;
      doku gerçekten bağlanınca bu zeminde parazit gibi çıktı. 0.17 → 5.9
      birim: fırça darbesi okunuyor, benek olmuyor. */
@@ -596,6 +610,59 @@ zeminDoku(5,'assets/zemin1.webp');   /* avlu: toprak üstü dağınık taş */
 sahneSabitleri(U);
 
 /* =============================================================
+   DOKULU PROGRAM — binalar (varlık UV taşıyorsa devreye giriyor)
+   Renk bölgesi yolu duruyor: binalar.json'da "bolge" varsa o, "uv" varsa bu
+   kullanılıyor. Böylece iki hattı yan yana karşılaştırabiliyorum. */
+const progDoku=GL.createProgram();
+GL.attachShader(progDoku,sh(GL.VERTEX_SHADER,`
+attribute vec3 aP; attribute vec3 aN; attribute vec2 aT;
+uniform mat4 uM,uV,uPr;
+varying vec3 vN; varying vec3 vW; varying vec2 vT2;
+void main(){ vec4 w=uM*vec4(aP,1.0); vW=w.xyz; vN=mat3(uM)*aN; vT2=aT;
+             gl_Position=uPr*uV*w; }`));
+GL.attachShader(progDoku,sh(GL.FRAGMENT_SHADER,FS_SAHNE));
+GL.bindAttribLocation(progDoku,0,'aP'); GL.bindAttribLocation(progDoku,1,'aN');
+GL.bindAttribLocation(progDoku,4,'aT');   /* 2 ve 3 deri programının */
+GL.linkProgram(progDoku);
+if(!GL.getProgramParameter(progDoku,GL.LINK_STATUS)) throw new Error(GL.getProgramInfoLog(progDoku));
+GL.useProgram(progDoku);
+const UDOK={};
+SAHNE_U.forEach(n=>UDOK[n]=GL.getUniformLocation(progDoku,n));
+sahneSabitleri(UDOK);
+GL.useProgram(prog);
+
+const BINA_DOKU={};
+function binaAtlas(ad,yol){
+  const t=GL.createTexture();
+  GL.activeTexture(GL.TEXTURE6); GL.bindTexture(GL.TEXTURE_2D,t);
+  GL.texImage2D(GL.TEXTURE_2D,0,GL.RGBA,1,1,0,GL.RGBA,GL.UNSIGNED_BYTE,
+                new Uint8Array([170,160,142,255]));
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_WRAP_S,GL.CLAMP_TO_EDGE);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_WRAP_T,GL.CLAMP_TO_EDGE);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MIN_FILTER,GL.LINEAR);
+  GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MAG_FILTER,GL.LINEAR);
+  const im=new Image();
+  im.onload=()=>{
+    GL.activeTexture(GL.TEXTURE6); GL.bindTexture(GL.TEXTURE_2D,t);
+    /* FLIP_Y ŞART. OBJ'de V ekseni AŞAĞIDAN başlıyor, WebGL ise FLIP_Y kapalıyken
+       görüntünün ilk (üst) satırını t=0'a koyuyor. Kapalı bırakılınca atlas
+       dikey ters biniyor ve bina ekranda paramparça görünüyor — dokunun kendisi
+       kusursuzken. Zemin dokularında fark etmiyordu, çünkü onlar döşenen
+       gürültü; bina atlası ise konuma duyarlı. */
+    GL.pixelStorei(GL.UNPACK_FLIP_Y_WEBGL,true);
+    GL.texImage2D(GL.TEXTURE_2D,0,GL.RGBA,GL.RGBA,GL.UNSIGNED_BYTE,im);
+    GL.texParameteri(GL.TEXTURE_2D,GL.TEXTURE_MIN_FILTER,GL.LINEAR_MIPMAP_LINEAR);
+    GL.generateMipmap(GL.TEXTURE_2D);
+    GL.activeTexture(GL.TEXTURE0);
+    console.log(`bina atlası ${yol} ${im.width}×${im.height}`);
+  };
+  im.onerror=()=>console.warn('bina atlası yüklenemedi: '+yol);
+  im.src=varlik(yol);
+  GL.activeTexture(GL.TEXTURE0);
+  BINA_DOKU[ad]=t;
+}
+
+/* =============================================================
    DERİLİ KARAKTER PROGRAMI
    Kemik matrisleri uniform dizisinde; köşe başına en güçlü 4 kemik. Parça
    gölgelendiricisi sahneyle AYNI (FS_SAHNE), yalnız köşe aşaması farklı.
@@ -606,7 +673,7 @@ GL.attachShader(progDeri,sh(GL.VERTEX_SHADER,`
 attribute vec3 aP; attribute vec3 aN; attribute vec4 aJ; attribute vec4 aW;
 uniform mat4 uM,uV,uPr;
 uniform mat4 uKemik[${DERI_KEMIK}];
-varying vec3 vN; varying vec3 vW;
+varying vec3 vN; varying vec3 vW; varying vec2 vT2;
 void main(){
   /* Ağırlıklar 1'e normalize edildiği için matrisleri doğrudan harmanlamak
      doğru sonucu veriyor (lineer harman skinning). */
@@ -615,6 +682,7 @@ void main(){
   vec4 w = uM * (sk * vec4(aP,1.0));
   vW = w.xyz;
   vN = mat3(uM) * (mat3(sk) * aN);
+  vT2 = vec2(0.0);
   gl_Position = uPr*uV*w;
 }`));
 GL.attachShader(progDeri,sh(GL.FRAGMENT_SHADER,FS_SAHNE));
@@ -1627,6 +1695,11 @@ if(HARITA==='kasaba'){
        95 bina 312.000 üçgen demekti ve oyun kasıyordu. */
     const blok=bi*N+bj;
     for(const k of kenarlar){
+      /* Kenarın tamamını boş bırak. Oran ayarıyla 77'den 73'e ancak inmişti;
+         uzun sırayı tercih etmek sayıyı azaltmıyor çünkü zaten kenar başına tek
+         bina koyuyor. Asıl kaldıraç kenarı komple atlamak — hem üçgen bütçesi
+         düşüyor hem bloklar arasında avlu geçişleri açılıyor. */
+      if(rnd()<0.34) continue;
       /* Şekil denetimi eklendikten sonra sadeleştirici bina başına 1.200
          yerine ~2.200 üçgende duruyor (diken üretmeyi reddediyor). Bütçeyi
          korumak için bina SAYISI düşürüldü: uzun dükkân sırası tercih ediliyor
@@ -1684,8 +1757,37 @@ const DEKOR=birlestir(STAT);
    yarıçapı ve sis sonu toplamından büyükse atla. */
 let BINA_BLOK=[];   /* {mx,mz,r, parca:[...]} */
 let BINA_CIZILEN=0; /* kare başına kaç blok gerçekten çizildi — ölçüm için */
+let BINA_DOKULU=false;   /* varlık UV taşıyorsa dokulu yol, yoksa renk bölgesi */
+/* UV'li kaynatıcı — birlestir() renge göre gruplar ve UV taşımaz. */
+function binaKaynat(yig){
+  const p=[],n=[],u=[],ix=[];
+  for(const s of yig){
+    const g=s.geo, m=s.model, nm=m3tersDevrik(m), taban=p.length/3;
+    for(let k=0;k<g.p.length/3;k++){
+      const x=g.p[k*3],y=g.p[k*3+1],z=g.p[k*3+2];
+      p.push(m[0]*x+m[4]*y+m[8]*z+m[12],
+             m[1]*x+m[5]*y+m[9]*z+m[13],
+             m[2]*x+m[6]*y+m[10]*z+m[14]);
+      const a=g.n[k*3],b=g.n[k*3+1],c=g.n[k*3+2];
+      let nx=nm[0]*a+nm[3]*b+nm[6]*c, ny=nm[1]*a+nm[4]*b+nm[7]*c, nz=nm[2]*a+nm[5]*b+nm[8]*c;
+      const l=Math.hypot(nx,ny,nz)||1;
+      n.push(nx/l,ny/l,nz/l);
+      u.push(g.uv[k*2],g.uv[k*2+1]);
+    }
+    for(let k=0;k<g.i.length;k++) ix.push(taban+g.i[k]);
+  }
+  const mesh={count:ix.length};
+  const tam=(v,T)=>{const b=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,b);
+    GL.bufferData(GL.ARRAY_BUFFER,new T(v),GL.STATIC_DRAW);return b;};
+  mesh.vb=tam(p,Float32Array); mesh.nb=tam(n,Float32Array); mesh.tb=tam(u,Float32Array);
+  mesh.ib=GL.createBuffer();GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER,mesh.ib);
+  GL.bufferData(GL.ELEMENT_ARRAY_BUFFER,new Uint16Array(ix),GL.STATIC_DRAW);
+  return mesh;
+}
 if(HARITA==='kasaba') fetch(varlik('assets/binalar.json'),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{
   if(!j||!j.bina) return;
+  BINA_DOKULU=!!j.bina[0].uv;
+  if(BINA_DOKULU) j.bina.forEach(b=>binaAtlas(b.ad,b.doku));
   const gruplar=new Map();
   for(const y of BINA_YER){
     const b=j.bina[y.tip]; if(!b) continue;
@@ -1694,10 +1796,13 @@ if(HARITA==='kasaba') fetch(varlik('assets/binalar.json'),{cache:'no-store'}).th
     const m=M(mT(y.x,0,y.z), mRy(y.yaw), mS(y.olcek,y.olcek,y.olcek),
               mT(-b.merkez[0], -b.merkez[1], -b.merkez[2]));
     const g=y.blok;
-    if(!gruplar.has(g)) gruplar.set(g,{yig:[],xs:[],zs:[]});
+    if(!gruplar.has(g)) gruplar.set(g,{yig:[],tip:new Map(),xs:[],zs:[]});
     const gr=gruplar.get(g);
     gr.xs.push(y.x); gr.zs.push(y.z);
-    for(const bl of b.bolge){
+    if(BINA_DOKULU){
+      if(!gr.tip.has(y.tip)) gr.tip.set(y.tip,[]);
+      gr.tip.get(y.tip).push({geo:b, model:m});
+    } else for(const bl of b.bolge){
       if(!bl.__geo) bl.__geo={p:bl.p,n:bl.n,i:bl.i};
       gr.yig.push({geo:bl.__geo, model:m, color:parseInt(bl.renk.slice(1),16),
                    emiss:bl.isik?0.9:0, kar:0, parilti:0, doku:0.55});
@@ -1705,7 +1810,9 @@ if(HARITA==='kasaba') fetch(varlik('assets/binalar.json'),{cache:'no-store'}).th
   }
   let ucgen=0, cizim=0;
   for(const gr of gruplar.values()){
-    const parca=birlestir(gr.yig);
+    const parca = BINA_DOKULU
+      ? Array.from(gr.tip, ([tip,yig])=>({ad:j.bina[tip].ad, geo:binaKaynat(yig)}))
+      : birlestir(gr.yig);
     const mx=(Math.min(...gr.xs)+Math.max(...gr.xs))/2;
     const mz=(Math.min(...gr.zs)+Math.max(...gr.zs))/2;
     let r=0;
@@ -1713,7 +1820,8 @@ if(HARITA==='kasaba') fetch(varlik('assets/binalar.json'),{cache:'no-store'}).th
     BINA_BLOK.push({mx,mz,r:r+7, parca});     /* +7: bina yarı-derinliği payı */
     ucgen+=parca.reduce((s,d)=>s+d.geo.count/3,0); cizim+=parca.length;
   }
-  console.log(`BİNA: ${BINA_YER.length} kopya, ${BINA_BLOK.length} blok → ${cizim} çizim, ${ucgen} üçgen`);
+  console.log(`BİNA: ${BINA_YER.length} kopya, ${BINA_BLOK.length} blok → ${cizim} çizim, `
+    +`${ucgen} üçgen, ${BINA_DOKULU?'DOKULU':'renk bölgesi'}`);
 }).catch(e=>console.warn('binalar.json yüklenemedi',e));
 
 /* --- çarpışma yardımcıları --- */
@@ -2598,18 +2706,31 @@ const MODEL_PALET=[0xe8e2d8, PPAL.SKIN, PPAL.SUIT, PPAL.DARK, 0x141a38];
 /* MODELİN KENDİ RENGİ mi, oyunun paleti mi?
    Palet zorlanınca hangi model konursa konsun oyuncu aynı lacivert ninjayı
    görüyor — model değiştirmenin görünürde bir karşılığı olmuyordu.
-   Kendi rengi = k-ortalamanın shaded.png'den çıkardığı bölge rengi. Dokuda ışık
-   pişmiş olduğu için ham renk guaj gölgelemesiyle çarpılınca koyulaşıyor;
-   bu yüzden parlaklık NORMALLENİYOR: renk tonu (hue/doygunluk) modelden,
-   parlaklık düzeyi paletten geliyor. Sahnenin ışığı böylece bozulmuyor. */
+   Kendi rengi = k-ortalamanın modelin KENDİ shaded.png'sinden çıkardığı bölge
+   rengi. (Doku modele ait olmalı: başka karakterin dokusuyla üretilince UV'ler
+   tutmuyor ve bölgeler gövdeye rastgele serpiliyor — "üstünde rastgele siyah-gri
+   boyalar" tam olarak buydu.)
+
+   Dokuda ışık pişmiş olduğu için ham renk guaj gölgelemesiyle çarpılınca
+   koyuluyor; bu yüzden TEK BİR ORTAK KAZANÇ uygulanıyor. Bölge başına ayrı
+   normalleme denendi ve yanlıştı: modelin iki kahverengisi (ten #be9372, deri
+   #705642) ayrı ayrı paletin basamaklarına çekilince ikisi de aynı kreme
+   çıkıp ayırt edilemiyordu. Ortak kazanç bölgeler arası farkı KORUYOR. */
 const MODEL_KENDI_RENGI=true;
-function modelRengi(kendi,paletIx){
-  const p=MODEL_PALET[Math.min(paletIx,MODEL_PALET.length-1)];
-  if(!MODEL_KENDI_RENGI) return p;
-  const lum=c=>((c>>16&255)*0.299+(c>>8&255)*0.587+(c&255)*0.114)/255;
-  const lk=lum(kendi)||0.001, lp=lum(p);
-  const k=Math.min(2.5,lp/lk);                 /* üst sınır: koyu bölge patlamasın */
-  const kanal=s=>Math.max(0,Math.min(255,Math.round((kendi>>s&255)*k)));
+const RENK_LUM=c=>((c>>16&255)*0.299+(c>>8&255)*0.587+(c&255)*0.114)/255;
+function modelKazanc(renkler){
+  const ort=a=>a.reduce((s,v)=>s+v,0)/(a.length||1);
+  const hedef=ort(MODEL_PALET.map(RENK_LUM));
+  const simdi=ort(renkler.map(RENK_LUM))||0.001;
+  /* TAŞMA SINIRI: kazanç serbest bırakılınca en açık bölgenin kanalı 255'i
+     geçip kırpılıyor ve RENK TONU kayıyor — ten (#be9372) sarı-beyaza
+     (#fff7c0) dönmüştü. Hiçbir kanal taşmayacak kadar kazanç uygula. */
+  let enBuyuk=1;
+  for(const c of renkler) enBuyuk=Math.max(enBuyuk,c>>16&255,c>>8&255,c&255);
+  return Math.max(0.75,Math.min(hedef/simdi,255/enBuyuk));
+}
+function renkOlcek(c,k){
+  const kanal=s=>Math.max(0,Math.min(255,Math.round((c>>s&255)*k)));
   return (kanal(16)<<16)|(kanal(8)<<8)|kanal(0);
 }
 const ANIM_FPS=30;
@@ -2626,11 +2747,14 @@ fetch(varlik('assets/karakter.json'),{cache:'no-store'}).then(r=>r.ok?r.json():n
     const c=parseInt(b.renk.slice(1),16);
     return {b, l:(c>>16&255)*0.299+(c>>8&255)*0.587+(c&255)*0.114};
   }).sort((a,b)=>b.l-a.l).map(x=>x.b);
+  const kendi=sirali.map(b=>parseInt(b.renk.slice(1),16));
+  const kaz=MODEL_KENDI_RENGI?modelKazanc(kendi):0;
   const nK=j.iskelet.length;
   MODEL={
     boy:j.boy, iskelet:j.iskelet, anim:j.anim,
     parca:sirali.map((b,i)=>({geo:deriMesh(b.p,b.n,b.j,b.w,b.i),
-                              renk:modelRengi(parseInt(b.renk.slice(1),16),i)})),
+                              renk:MODEL_KENDI_RENGI?renkOlcek(kendi[i],kaz)
+                                   :MODEL_PALET[Math.min(i,MODEL_PALET.length-1)]})),
     /* çalışma tamponları — kare başına ayırma yapılmıyor */
     ters:j.iskelet.map(k=>k.ters?new Float32Array(k.ters):null),
     qA:new Float32Array(nK*4), tA:new Float32Array(nK*3),
@@ -2982,19 +3106,49 @@ function render(now){
      Küre testi: bloğa bakan yönle kamera ileri yönü arasındaki açı, yarım
      görüş açısı + kürenin açısal yarıçapını geçiyorsa blok kadraj dışında. */
   BINA_CIZILEN=0;
-  const kirpMenzil=TEMA.sisMenzil[1];
-  const yariGorus=Math.atan(Math.tan(FOV/2)*Math.max(1,W/H))+0.12;   /* +pay */
-  for(const bl of BINA_BLOK){
-    const dx=bl.mx-camX, dz=bl.mz-camZ;
-    const d=Math.hypot(dx,dz);
-    if(d > kirpMenzil+bl.r) continue;
-    if(d > bl.r){                                  /* içindeysek her zaman çiz */
-      const ic=(dx*camFx+dz*camFz)/d;              /* ileri yönle kosinüs */
-      const aci=Math.acos(Math.max(-1,Math.min(1,ic)));
-      if(aci - Math.asin(Math.min(1,bl.r/d)) > yariGorus) continue;
+  if(BINA_BLOK.length){
+    const kirpMenzil=TEMA.sisMenzil[1];
+    const yariGorus=Math.atan(Math.tan(FOV/2)*Math.max(1,W/H))+0.12;   /* +pay */
+    if(BINA_DOKULU){
+      GL.useProgram(progDoku);
+      GL.uniformMatrix4fv(UDOK.uPr,false,PROJ);
+      GL.uniformMatrix4fv(UDOK.uV,false,VIEW);
+      GL.uniform3f(UDOK.uCam,camX,camY,camZ);
+      GL.uniformMatrix4fv(UDOK.uM,false,mModel(0,0,0,0,1,1,1));  /* dönüşüm pişmiş */
+      GL.uniform3f(UDOK.uColor,1,1,1);
+      GL.uniform1f(UDOK.uAtlasGuc,1);
+      GL.uniform1f(UDOK.uEmiss,0);GL.uniform1f(UDOK.uAlpha,1);
+      GL.uniform1f(UDOK.uKar,0);GL.uniform1f(UDOK.uParilti,0);
+      GL.uniform1f(UDOK.uDoku,0.25);        /* fırça payı düşük: doku zaten var */
+      GL.enableVertexAttribArray(4);
     }
-    for(const s of bl.parca) draw(s.geo,s.model,s.color,s.emiss,1,s.kar,s.parilti,s.doku);
-    BINA_CIZILEN++;
+    for(const bl of BINA_BLOK){
+      const dx=bl.mx-camX, dz=bl.mz-camZ;
+      const d=Math.hypot(dx,dz);
+      if(d > kirpMenzil+bl.r) continue;
+      if(d > bl.r){                                  /* içindeysek her zaman çiz */
+        const ic=(dx*camFx+dz*camFz)/d;              /* ileri yönle kosinüs */
+        const aci=Math.acos(Math.max(-1,Math.min(1,ic)));
+        if(aci - Math.asin(Math.min(1,bl.r/d)) > yariGorus) continue;
+      }
+      if(BINA_DOKULU) for(const s of bl.parca){
+        GL.activeTexture(GL.TEXTURE6);
+        GL.bindTexture(GL.TEXTURE_2D,BINA_DOKU[s.ad]);
+        GL.bindBuffer(GL.ARRAY_BUFFER,s.geo.vb);GL.vertexAttribPointer(0,3,GL.FLOAT,false,0,0);
+        GL.bindBuffer(GL.ARRAY_BUFFER,s.geo.nb);GL.vertexAttribPointer(1,3,GL.FLOAT,false,0,0);
+        GL.bindBuffer(GL.ARRAY_BUFFER,s.geo.tb);GL.vertexAttribPointer(4,2,GL.FLOAT,false,0,0);
+        GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER,s.geo.ib);
+        GL.drawElements(GL.TRIANGLES,s.geo.count,GL.UNSIGNED_SHORT,0);
+      }
+      else for(const s of bl.parca) draw(s.geo,s.model,s.color,s.emiss,1,s.kar,s.parilti,s.doku);
+      BINA_CIZILEN++;
+    }
+    if(BINA_DOKULU){
+      /* 4 KAPATILMALI: ana program bu yuvayı bildirmiyor */
+      GL.disableVertexAttribArray(4);
+      GL.activeTexture(GL.TEXTURE0);
+      GL.useProgram(prog);
+    }
   }
   /* karakterler */
   drawWizard(now,RDT);

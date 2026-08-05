@@ -9,6 +9,15 @@ const DOSYALAR=['index.html','muhur.html','muhur.js','wkwebview-test.html'];
 const KLASORLER=['mediapipe'];
 const SECMELI=['assets/karakter.json','assets/binalar.json',
                'assets/zemin1.webp','assets/zemin2.webp'];      /* varsa kopyala */
+/* BİNA ATLASLARI binalar.json'un İÇİNDE yazıyor (b.doku), index.html'de adı
+   hiç geçmiyor — bu yüzden listeye elle eklenmemiş ve telefona hiç gitmemişti.
+   Belirti sessiz: atlas yüklenemeyince binaAtlas'ın 1×1 yedek pikseli (bej)
+   kalıyor, bütün kasaba tek renge dönüyor ve kimse "doku eksik" demiyor.
+   Elle yazmak yerine dosyadan okunuyor ki bina seti değişince yine kopyalansın. */
+try{
+  const bj=JSON.parse(fs.readFileSync(path.join(kok,'assets/binalar.json'),'utf8'));
+  for(const k in bj.bina) if(bj.bina[k].doku) SECMELI.push(bj.bina[k].doku);
+}catch(e){ /* binalar.json yoksa kasaba haritası zaten yüklenmiyor */ }
 
 function kopyalaKlasor(src,dst){
   fs.mkdirSync(dst,{recursive:true});
