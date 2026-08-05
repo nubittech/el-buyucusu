@@ -1456,7 +1456,7 @@ function draw(geo,model,color,emiss,alpha,kar,parilti,doku){
    ucu görünmeyen bir ızgara gibi okunuyordu. 64×64'te köşe 45; referanstaki
    gibi surun karşı kenarı meydandan seçiliyor ve kenardan kenara koşu
    13.8 sn'den 10.0 sn'ye iniyor. */
-const AR = HARITA==='kasaba' ? 32 : 30;   /* arena yarı-boyu */
+const AR = HARITA==='kasaba' ? 33 : 30;   /* arena yarı-boyu */
 const MU=window.MUHUR;                       /* paylaşılan mühür/element katmanı */
 const EL_IDS=Object.keys(MU.ELEM);
 const OY_CAN=100, EN_CAN=100;                /* düello birkaç doğru okuma sürsün */
@@ -1720,7 +1720,12 @@ else if(HARITA==='kasaba'){
   /* 3 blok + 4 sokak = 3×11.5 + 4×7 = 62.5 ≈ arena 64.
      TEK SAYIDA blok olması şart: orta blok boşaltılıp meydan oluyor. Çift
      sayıda merkez bir sokak kesişimine denk geliyor ve meydan olmuyor. */
-  const BLOK=11.5, SOKAK=7.0, ADIM=BLOK+SOKAK;
+  /* SOKAK 7 → 9, BLOK 11.5 → 10. 3×10 + 4×9 = 66 = arena.
+     Sokak genişlemesinin sebebi ölçüm: kenar başına iki parça konunca
+     merkezleri 6 birim arayla düşüyor ve ayak izi 4.5 olduğu için aralarında
+     1.5 birim kalıyordu — "dip dibe" tam olarak buydu. Artık kenar başına TEK
+     parça var ve sokak da genişledi. */
+  const BLOK=10.0, SOKAK=9.0, ADIM=BLOK+SOKAK;
   const N=3, BAS=-(N*BLOK+(N+1)*SOKAK)/2 + SOKAK, ORTA=(N-1)/2;
   IZGARA=[BAS,ADIM,SOKAK];
 
@@ -1738,10 +1743,30 @@ else if(HARITA==='kasaba'){
      kutu koyarsak oyuncu bir kaldırıma takılıp kalıyor. */
   const KATI={ ev:1, dukkan:1, tezgah:1, kuyu:1, duvar:1, cit:1, sutun:1 };
 
+  /* ASGARİ AÇIKLIK. Kar haritasında da aynı sorun çıkmıştı: yapışık engeller
+     içbükey cep oluşturup düşmanın yönlendirmesini kilitliyor. Burada ayrıca
+     görsel: bina bloğu tek kütleye dönüşünce sokak okunmuyor.
+     Duvar/bordür/korkuluk muaf — onlar zaten sıra hâlinde diziliyor. */
+  /* 3.0 fazla katıydı: aynı bloğun komşu kenarlarındaki binalar köşede
+     birbirine yaklaşınca hepsi eleniyordu ve 32 yuvadan yalnız 8'i doluyordu.
+     2.0 hem yürünebilir aralık bırakıyor hem referansın yoğunluğunu tutturuyor. */
+  const ACIKLIK=2.0, yerlesik=[];
+  const MUAF={duvar:1,bordur:1,korkuluk:1,sutun:1};
+  function uygunMu(rol,x,z,w,d){
+    if(MUAF[rol]) return true;
+    for(const o of yerlesik){
+      const gx=Math.max(0, Math.max((x-w/2)-o.maxx, o.minx-(x+w/2)));
+      const gz=Math.max(0, Math.max((z-d/2)-o.maxz, o.minz-(z+d/2)));
+      if(Math.hypot(gx,gz) < ACIKLIK) return false;
+    }
+    return true;
+  }
   function koy(rol,x,z,yaw,blok){
     const [w0,d0]=AYAK[rol]||[3,3];
     let w=w0, d=d0;
     if(Math.abs(Math.cos(yaw))<0.5){ const t=w; w=d; d=t; }   /* 90° dönükse takas */
+    if(!uygunMu(rol,x,z,w,d)) return false;
+    if(!MUAF[rol]) yerlesik.push({minx:x-w/2,maxx:x+w/2,minz:z-d/2,maxz:z+d/2});
     if(KATI[rol]){
       /* Kutu cepheden biraz dar: saçak ve fener kolu dışarı taşıyor, onları da
          katarsak oyuncu duvara değmeden takılıyor. */
@@ -1749,6 +1774,7 @@ else if(HARITA==='kasaba'){
                 h:YUKSEK[rol]||3,duvar:rol==='duvar'});
     }
     BINA_YER.push({rol,x,z,yaw,blok:blok===undefined?-1:blok});
+    return true;
   }
 
   /* --- SUR: taş duvar panelleri + köşe/ara sütunlar, güneyde kapı ---
@@ -1786,27 +1812,31 @@ else if(HARITA==='kasaba'){
       {yaw:Math.PI/2,  cx:x0-0.3,      cz:mz,          uzun:'z'},
       {yaw:-Math.PI/2, cx:x0+BLOK+0.3, cz:mz,          uzun:'z'},
     ];
+    /* KENAR BAŞINA TEK PARÇA. İki parça koymak 0.7-1.5 birimlik aralık
+       bırakıyordu; referansta binalar arasında yürünebilir boşluklar var.
+       Konum kenar boyunca hafifçe kaydırılıyor ki cepheler hizalı bir duvar
+       gibi durmasın. */
     for(const k of kenarlar){
-      const ofs=BLOK*0.26;
-      const yerler=[-1,1].map(yon=>({
-        x: k.uzun==='x'? k.cx+yon*ofs : k.cx,
-        z: k.uzun==='x'? k.cz         : k.cz+yon*ofs }));
-      for(const y of yerler){
-        const p=rnd();
-        /* Referansta bina ile çit iç içe: her boşluk bina değil, bir kısmı
-           çitle kapatılmış avlu girişi. Oran kabaca ikide bir. */
-        if(p<0.42)      koy('ev',    y.x,y.z,k.yaw,blok);
-        else if(p<0.70) koy('dukkan',y.x,y.z,k.yaw,blok);
-        else if(p<0.92) koy('cit',   y.x,y.z,k.yaw,blok);
-        /* kalanı açık bırakılıyor — avluya giriş */
-      }
+      const kay=(rnd()-0.5)*BLOK*0.30;
+      const x=k.uzun==='x'? k.cx+kay : k.cx;
+      const z=k.uzun==='x'? k.cz     : k.cz+kay;
+      const p=rnd();
+      /* Doluluk sırayla 0.92 → 0.74 → 0.82 → 0.90 denendi. 0.74'te 32 yuvadan
+         yalnız 8'i doluyordu (açıklık denetimi de eliyor), referansın ~22
+         binasının çok altı. 0.90 aradaki yeri tutuyor. */
+      if(p<0.46)      koy('ev',    x,z,k.yaw,blok);
+      else if(p<0.76) koy('dukkan',x,z,k.yaw,blok);
+      else if(p<0.90) koy('cit',   x,z,k.yaw,blok);
+      /* kalan %10 açık — avlu girişi ve geçit */
     }
   }
 
   /* --- MEYDAN: kuyu merkezde, iki tezgâh, kenarında bordür --- */
   koy('kuyu',0,0,rnd()*6.283);
+  /* Tezgâhlar 0.40×blok'ta kuyunun ayak iziyle çakışıp eleniyordu (kuyu
+     4.6×5.5). 0.78'de meydanın kenarına oturuyorlar. */
   for(const [ax,az] of [[-1,1],[1,-1]]){
-    koy('tezgah', ax*BLOK*0.40, az*BLOK*0.40, Math.atan2(-ax,-az));
+    koy('tezgah', ax*BLOK*0.78, az*BLOK*0.78, Math.atan2(-ax,-az));
   }
   /* Bordür meydanın sınırını okutuyor: oyuncu düello alanına girdiğini
      ayağının altından anlıyor. Çarpışması yok, sadece görsel. */
