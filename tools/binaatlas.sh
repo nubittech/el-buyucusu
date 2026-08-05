@@ -1,5 +1,5 @@
 #!/bin/sh
-# BİNA ATLASI: shaded.png → oyunun kullandığı WebP
+# BİNA ATLASI: modelin doku haritası → oyunun kullandığı WebP
 #
 #   sh tools/binaatlas.sh ~/Desktop/newmap
 #
@@ -28,8 +28,16 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 for D in "$KOK"/*/; do
   AD="$(basename "$D")"
-  SRC="$D/shaded.png"
-  [ -f "$SRC" ] || continue
+  # Kaynak haritayı tools/atlassec.js seçiyor: PBR açıkken gelen
+  # texture_diffuse her zaman daha iyi DEĞİL (ölçüldü, varlıktan varlığa
+  # değişiyor), o yüzden dosya adına değil ezilmiş siyah payına bakılıyor.
+  SRC="$(AYRINTI=1 node "$(dirname "$0")/atlassec.js" "$D" 2>/dev/null)" || continue
+  [ -n "$SRC" ] && [ -f "$SRC" ] || continue
+  # Klasör adı doğrudan dosya adı oluyor ve URL olarak isteniyor. İndirilen
+  # klasörlerde boşluk/parantez olabiliyor ("... (1)"); kodlanmamış boşluk
+  # isteği kırar. Güvenli karakterlere indirgeniyor.
+  AD="$(printf '%s' "$AD" | tr -c 'a-zA-Z0-9._-' '-')"
+  printf '  %s: %s\n' "$AD" "$(basename "$SRC")"
   # 1) içerik maskesi + bulanık dolgu
   magick "$SRC" -colorspace Gray -threshold 2% -morphology Dilate Diamond:2 "$TMP/mask.png"
   magick "$SRC" -blur 0x14 "$TMP/blur.png"

@@ -50,15 +50,28 @@ const RED_MESAFE=1.8, RED_ORAN=1.30;
 /* OY PENCERESİ — eski yöntem "aynı etiketi kesintisiz KILIT_MS boyunca gör"
    şartıydı; el hareket edince araya giren tek bir bozuk kare sayacı sıfırlıyor,
    poz hiç onaylanmıyordu. Artık son OY_MS içindeki kareler oylanıyor: dağınık
-   kayıplar sonucu değiştirmiyor, yalnız çoğunluk gerekiyor. */
-const OY_MS=260, OY_PAY=0.55, OY_ASGARI=5;
+   kayıplar sonucu değiştirmiyor, yalnız çoğunluk gerekiyor.
+   PENCERE, TUTMA SÜRESİNDEN GENİŞ OLMAK ZORUNDA. Onay şartındaki `sure`,
+   kazananın PENCERE İÇİNDEKİ ilk ve son oyu arasındaki fark — yani OY_MS'i
+   hiçbir zaman aşamaz. OY_MS < KILIT_MS olsaydı şart matematiksel olarak
+   sağlanamaz, hiçbir mühür onaylanmazdı. Pay da gerekiyor: çoğunluk testinin
+   poz değişiminden sonra toparlanacak yeri kalsın. */
+const OY_MS=420, OY_PAY=0.55, OY_ASGARI=5;
 /* KOMBO KAPALI (şimdilik). Açıkken: mühürler diziye yazılır, 👉 diziyi kapatır,
    beceri tablosunda aranır ve yüklenir. Kapalıyken: tek mühür beceriyi doğrudan
    şarj eder, 👉 yalnız ateşler, ateşleyince şarj sıfırlanır. Kombo mantığı
    silinmedi — beceriBul ve dizi motoru duruyor, yalnız bu bayrakla atlanıyor. */
 let KOMBO=true;   /* AÇIK: dizi mühürleri, silah diziyi kapatır */
 const komboAyar=v=>{KOMBO=!!v;};
-const KILIT_MS=150;   /* göstergelerde ilerleme çubuğu için korunuyor */
+/* TUTMA SÜRESİ — bir mührün onaylanması için pozun bu kadar korunması gerekiyor.
+   150 ms'ti; 30 Hz çıkarımda bu yalnız 5 kare demek ve ölçümde onay ortalama
+   177 ms'de düşüyordu. El bir pozdan diğerine giderken aradan geçtiği şekiller
+   o kadarlık bir pencereyi doldurabiliyor, yani oyuncunun hiç yapmadığı mühür
+   onaylanıyordu — sahadaki "yıldırım işareti yapmadan yıldırım atıyor"
+   şikâyetinin kaynağı bu. 300 ms kasıtlı duruşu geçişten ayırıyor: ölçümde onay
+   307 ms'ye çıkıyor, buna karşılık kaçırılan mühür 3000'de 1-3'te kalıyor.
+   Gösterge çubuğu da bu süreyi dolduruyor, yani bekleme oyuncuya görünür. */
+const KILIT_MS=300;
 const DIZI_MS=900;    /* mühürler arası zaman aşımı */
 const CEZA_MS=400;    /* eşleşmeyen dizi cezası */
 /* Aynı mührü ARDIŞIK kullanmak için el bu kadar süre onaysız kalmalı.
@@ -286,10 +299,11 @@ function yeniDizi(){
 }
 /* Son OY_MS içindeki kareleri oyla. Onay için üç şart birden:
    pencerenin çoğunluğu (OY_PAY), yeterli örnek (OY_ASGARI) ve kazananın
-   pencerede en az KILIT_MS önce başlamış olması. Süre şartı olmazsa kazara
+   KILIT_MS boyunca KESİNTİSİZ tutulmuş olması. Süre şartı olmazsa kazara
    bir anlık poz da tetikler; çoğunluk şartı olmazsa hareket hâlindeki
    dağınık kayıplar pozu hiç onaylatmaz. İkisi birlikte gerekiyor. */
 const OY_TAVAN=64;                 /* ~1 sn @60fps — hiçbir koşulda üstüne çıkmasın */
+const BOSLUK_MS=100;               /* tutuşu bölmeyen kesinti payı: 3 kare @30 Hz */
 function oyla(D,id,now,yeniOrnek){
   /* yeniOrnek=false → bu karede ÇIKARIM YAPILMADI, önceki sonuç yeniden
      kullanılıyor. Oy kaydetmek pencereyi kopya örnekle doldurur ve
@@ -301,17 +315,31 @@ function oyla(D,id,now,yeniOrnek){
      her hâlükârda bir tavan uygula. */
   while(D.oylar.length&&(now-D.oylar[0].t>OY_MS||D.oylar[0].t>now+1)) D.oylar.shift();
   while(D.oylar.length>OY_TAVAN) D.oylar.shift();
-  const say={},ilk={},sonT={}; let en=null,enN=0;
+  const say={}; let en=null,enN=0;
   for(const o of D.oylar){ if(!o.id) continue;
     say[o.id]=(say[o.id]||0)+1;
-    if(ilk[o.id]===undefined) ilk[o.id]=o.t;
-    sonT[o.id]=o.t;
     if(say[o.id]>enN){enN=say[o.id];en=o.id;} }
-  /* süre İLK ve SON oy arası — "şimdiye kadar" dersek poz bittikten sonra da
-     eski oylar pencerede kaldığı sürece büyümeye devam eder ve kısa bir
-     dokunuş gecikmeli olarak onaylanır. */
   const oran=D.oylar.length?enN/D.oylar.length:0;
-  const sure=en?sonT[en]-ilk[en]:0;
+  /* SÜRE = EN UZUN KESİNTİSİZ TUTUŞ, ilk-son oy arası DEĞİL.
+     Eskiden sure=sonT[en]-ilk[en] idi: pencerede bir kez başta bir kez sonda
+     görünen poz, arada bambaşka pozlar olmasına rağmen aradaki BÜTÜN süreyi
+     tutulmuş sayıyordu. Ölçüm: 🔥⚡💧⚡🌪 sırasıyla her biri 150 ms tutulan
+     (yani hiçbiri onay süresini doldurmayan) bir akış ⚡'i onaylatıyordu —
+     "yıldırım işaretini yapmadan yıldırım atıyor" şikâyeti tam olarak bu.
+     Artık kazananın oyları zaman sırasında geziliyor ve en uzun KESİNTİSİZ
+     serisi ölçülüyor. BOSLUK_MS'lik pay, oylama penceresinin varlık sebebini
+     koruyor: tanıma tipik olarak 1-3 kare kesiliyor (33-100 ms), o kadarlık
+     kopma seriyi bölmemeli — ama araya BAŞKA bir poz girdiği anda bölüyor. */
+  let sure=0;
+  if(en){
+    let basla=null, onceki=null;
+    for(const o of D.oylar){
+      if(o.id!==en) continue;
+      if(basla===null||o.t-onceki>BOSLUK_MS) basla=o.t;
+      onceki=o.t;
+      if(onceki-basla>sure) sure=onceki-basla;
+    }
+  }
   const tamam=en&&oran>=OY_PAY&&enN>=OY_ASGARI&&sure>=KILIT_MS;
   return {kazanan:tamam?en:null, aday:en, oran, sure};
 }

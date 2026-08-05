@@ -89,9 +89,13 @@ for(const ad of klasorler){
   console.log(`${ad}: ${o.f.length} → ${s.ucgen.length} üçgen (%${(s.ucgen.length/o.f.length*100).toFixed(1)}), `
     +`${s.poz.length} köşe, kırık kenar ${s.kirikSayi}`);
 
-  binalar.push({ad, boy:+boy.toFixed(4), en:+en.toFixed(4), derin:+derin.toFixed(4),
+  /* Ad URL olarak isteniyor; indirilen klasörlerde boşluk/parantez olabiliyor
+     ("... (1)") ve kodlanmamış boşluk isteği kırar. binaatlas.sh de aynı
+     indirgemeyi yapıyor, ikisinin AYNI adı üretmesi şart. */
+  const guvenliAd=ad.replace(/[^a-zA-Z0-9._-]/g,'-');
+  binalar.push({ad:guvenliAd, boy:+boy.toFixed(4), en:+en.toFixed(4), derin:+derin.toFixed(4),
     merkez:[+((mn[0]+mx[0])/2).toFixed(4), +mn[1].toFixed(4), +((mn[2]+mx[2])/2).toFixed(4)],
-    doku:`assets/${ad}.webp`, p, n, uv:u, i});
+    doku:`assets/${guvenliAd}.webp`, p, n, uv:u, i});
 }
 
 fs.writeFileSync(cikti, JSON.stringify({bina:binalar}));
