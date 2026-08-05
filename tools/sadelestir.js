@@ -89,6 +89,9 @@ function qEnIyi(q,p1,p2){
    iki yana kayiyor, aralarinda catlak aciliyor ve bina "patlamis" gorunuyor
    (cikti kenarlarinin %68'i acikti). Tek geciste sadelestirip sonra bolmek
    sinirlari birebir ayni konumda tutuyor. */
+/* Çökertme sonrası üçgenin en düşük kabul edilebilir şekil kalitesi.
+   Kalite = 4√3·alan / kenar karelerinin toplamı: eşkenar üçgende 1, iğnede 0. */
+const SEKIL_ESIK=0.16;
 function sadelestirQEM(pozGiris, ucgenGiris, hedef, etiketler, sinirAgirlik){
   /* 1) KONUMA GÖRE KAYNAT. OBJ dosyaları UV/normal dikişlerinde aynı noktayı
      birden çok köşe olarak tutuyor; kaynatmazsak o dikişler "kenar" sanılıp
@@ -217,7 +220,33 @@ function sadelestirQEM(pozGiris, ucgenGiris, hedef, etiketler, sinirAgirlik){
       const l=Math.hypot(nx,ny,nz);
       const d=yuzNormal[ti];
       if(!d||l<1e-14){ iyi=false; break; }
-      if((nx*d[0]+ny*d[1]+nz*d[2])/l < 0.05){ iyi=false; break; }   /* ters ya da iğne */
+      /* TERS DÖNME EŞİĞİ 0.05 → 0.35.
+         0.05 kosinüs, üçgenin tek bir çökertmede 87 derece dönmesine izin
+         veriyordu; her adım ayrı ayrı "geçerli" görünüp toplamda yüzey
+         tanınmaz hale geliyordu. */
+      if((nx*d[0]+ny*d[1]+nz*d[2])/l < 0.35){ iyi=false; break; }
+      /* ŞEKİL DENETİMİ — "cam kırığı" dikenlerin asıl sebebi buydu.
+         Kuadrik hata yalnız DÜZLEME uzaklığı ölçüyor; upuzun ve iğne gibi bir
+         üçgen de düzlemin üstünde durduğu sürece bedava. Ölçüldü: çıktının
+         %3'ü sliver (kalite<0.08) çıkıyordu ve "az" diye geçmiştim — oysa bina
+         başına 36, sahnede ~2.800 diken demek, ekranda görülen tam olarak o.
+         Kalite = 4√3·alan / kenar karelerinin toplamı; eşkenarda 1, iğnede 0. */
+      const kalite=(A,B,C)=>{
+        const L2=[[A,B],[B,C],[C,A]].map(([X,Y])=>
+          (X[0]-Y[0])**2+(X[1]-Y[1])**2+(X[2]-Y[2])**2);
+        let ax=B[0]-A[0],ay=B[1]-A[1],az=B[2]-A[2];
+        let bx=C[0]-A[0],by=C[1]-A[1],bz=C[2]-A[2];
+        const al=Math.hypot(ay*bz-az*by, az*bx-ax*bz, ax*by-ay*bx)/2;
+        return 4*Math.sqrt(3)*al/(L2[0]+L2[1]+L2[2]+1e-20);
+      };
+      const yeniKal=kalite(P[0],P[1],P[2]);
+      /* MUTLAK EŞİK TIKIYOR. 0.16'lık düz eşik denendi: sadeleştirici 1200
+         yerine 4100'de duruyordu, çünkü KAYNAK mesh'te zaten eşiğin altında
+         üçgenler var (ölçüldü: %4.4'ü sliver) ve onlara dokunan her çökertme
+         reddediliyordu. Kural "kötüleştirme" olarak yazıldı: hâlihazırda kötü
+         olan bir üçgen çökebilir, ama iyi bir üçgen iğneye çevrilemez. */
+      const eskiKal=kalite(poz[t[0]],poz[t[1]],poz[t[2]]);
+      if(yeniKal < SEKIL_ESIK && yeniKal < eskiKal*0.92){ iyi=false; break; }
     }
     if(!iyi){ atlanan++; continue; }
 

@@ -113,7 +113,7 @@ canvas{touch-action:none}
 
 <div class="ov2" id="startOv">
   <h1>🥷 Gölge Ninja</h1>
-  <div class="sub" id="subLine">v8.9 · düşman · motor bekleniyor…</div>
+  <div class="sub" id="subLine">v9.0 · bina · motor bekleniyor…</div>
   <div class="rules">
     🔥 <b>Ateş</b> baş+işaret · 🌪 <b>Hava</b> açık avuç · 💧 <b>Su</b> üç parmak<br>
     ⚡ <b>Yıldırım</b> baş+serçe · 🪨 <b>Toprak</b> işaret+serçe<br>
@@ -166,7 +166,7 @@ const TEMALAR={
     dag:[0xa9b8d2,0x93a5c6,0x7b8fb6],       /* uzak→yakın sırt katmanları */
     camGovde:0x6a6152, camA:0x5d7266, camB:0x4c6157, camKar:0xd8e3f2,
     kayaA:0xc3cee0, kayaB:0xaebcd2, karTane:[1,1,1],
-    karUst:0xf1f6fd, parilti:0.30, dagKar:0xe6edf8,
+    karUst:0xf1f6fd, parilti:0.30, dagKar:0xe6edf8, karakterKar:0.35,
   },
   gece:{
     gece:true, ton:[0.70,0.46],
@@ -197,7 +197,7 @@ const TEMALAR={
     dag:[0x46527a,0x333e63,0x232c4c],
     camGovde:0x191d30, camA:0x1b2b40, camB:0x131f31, camKar:0x8ea4c8,
     kayaA:0x63769e, kayaB:0x4e5f83, karTane:[0.86,0.92,1.0],
-    karUst:0xcfdcf3, parilti:0.55, dagKar:0xa9bde0,
+    karUst:0xcfdcf3, parilti:0.55, dagKar:0xa9bde0, karakterKar:0.35,
   },
   kasaba:{
     gece:true,
@@ -228,7 +228,10 @@ const TEMALAR={
     dag:[0x232c44,0x1a2134,0x121726],
     camGovde:0x141828, camA:0x182434, camB:0x101a28, camKar:0x6f7f9c,
     kayaA:0x4a5262, kayaB:0x3a4150, karTane:[0.86,0.92,1.0],
-    karUst:0x9aa6bc, parilti:0.0, dagKar:0x5c6a86,
+    /* karakterKar 0: kar arenasından kalan 0.35, kasabada karakterin yukarı
+       bakan yüzeylerini mavi-griye (karUst) boyuyordu — model kendi rengini
+       kaybedip cilalı metal gibi duruyordu. Kasabada kar yok, kar da yok. */
+    karUst:0x9aa6bc, parilti:0.0, dagKar:0x5c6a86, karakterKar:0.0,
   },
 };
 const TEMA = HARITA==='kasaba' ? TEMALAR.kasaba : TEMALAR.gece;
@@ -253,7 +256,7 @@ const hpBarEl=document.getElementById('hpBar'), hpLblEl=document.getElementById(
 const enBarEl=document.getElementById('enBar'), enWrapEl=document.getElementById('enWrap'), enLblEl=document.getElementById('enLbl');
 const seqStripEl=document.getElementById('seqStrip'), lockPipEl=document.getElementById('lockPip');
 const skillNowEl=document.getElementById('skillNow'), skillSubEl=document.getElementById('skillSub2');
-document.getElementById('subLine').textContent='v8.9 · düşman · motor hazır ✓';
+document.getElementById('subLine').textContent='v9.0 · bina · motor hazır ✓';
 
 /* DPR TAVANI 2 → 1.5.
    Sahne hedefi tam çözünürlükte çiziliyor (bloom bulanıklığı çeyrekte, o
@@ -459,10 +462,15 @@ void main(){
     vec3 karCol=uKarRenk*(0.74+0.44*b)*isik*(0.90+fr*0.20);
     col=mix(col,karCol,k*uKar);
   }
-  /* kenar ışığı: siluetin dış hattında soluk bir kaçak ışık */
+  /* kenar ışığı: siluetin dış hattında soluk bir kaçak ışık.
+     ALBEDOYA BAĞLI, çünkü sabit toplama koyu yüzeylerde metal görüntüsü
+     veriyordu — ölçüldü: siyah kumaşın tabanı 0.05, kenar terimi tepe açıda
+     0.45 ekliyordu, yani yüzey kendi renginin 10 KATI parlıyor ve cilalı
+     plastiğe dönüyordu. Açık yüzeyde (taban≈1) terim eskisiyle aynı;
+     yalnız koyu malzeme sönüyor. */
   vec3 v=normalize(uCam-vW);
   float rim=pow(1.0-max(dot(n,v),0.0),3.0);
-  col+=uWarm*rim*0.30*(0.35+b);
+  col+=uWarm*rim*0.30*(0.35+b)*(0.25+0.75*taban);
   /* --- KRİSTAL PARILTISI ----------------------------------------------------
      Düz specular kara plastik görüntüsü veriyor. Yüksek frekanslı fırça
      değeriyle eşikleyip noktacıklara bölünce ay ışığında parlayan kar
@@ -544,6 +552,16 @@ function sahneSabitleri(u){
   GL.activeTexture(GL.TEXTURE3);GL.bindTexture(GL.TEXTURE_2D,tex);
   GL.activeTexture(GL.TEXTURE0);            /* 0'ı çalışma birimi olarak bırak */
 }
+/* VARLIK ÖNBELLEK KIRICI.
+   Üç kez yanılttı: tarayıcı (ve WKWebView) assets/*.json ile *.webp
+   dosyalarını önbellekte tutuyor, yeni üretilmiş varlık bastıktan sonra bile
+   ESKİSİ yükleniyordu. Ölçüm yaparken diskte doğru, ekranda yanlış dosya
+   vardı — telefondaki ekran görüntüleri de bu yüzden bastığım sürümü
+   göstermemiş olabilir. Sürüm damgası her varlık isteğine ekleniyor. */
+const VSUR=(document.getElementById('subLine')||{textContent:'v0'}).textContent
+             .replace(/[^0-9.]/g,'').slice(0,8)||'0';
+const varlik=(yol)=>yol+'?v='+VSUR;
+
 /* --- ZEMİN DOKULARI (4 ve 5. birim) ------------------------------------------
    WebP: 1254² PNG'ler 2.1 MB'tı, kırpılıp 512'ye indirilip WebP'ye çevrilince
    23 KB. Kaynak swatch'lar döşenmiyordu (kenarda koyu çerçeve + dikiş);
@@ -570,7 +588,7 @@ function zeminDoku(birim,yol){
     console.log(`zemin dokusu ${yol} ${im.width}×${im.height} → birim ${birim}`);
   };
   im.onerror=()=>console.warn('zemin dokusu yüklenemedi: '+yol);
-  im.src=yol;
+  im.src=varlik(yol);
   GL.activeTexture(GL.TEXTURE0);
 }
 zeminDoku(4,'assets/zemin2.webp');   /* sokak: sık taş döşeme */
@@ -1609,14 +1627,18 @@ if(HARITA==='kasaba'){
        95 bina 312.000 üçgen demekti ve oyun kasıyordu. */
     const blok=bi*N+bj;
     for(const k of kenarlar){
-      if(rnd()<0.62){                          /* uzun dükkân sırası */
+      /* Şekil denetimi eklendikten sonra sadeleştirici bina başına 1.200
+         yerine ~2.200 üçgende duruyor (diken üretmeyi reddediyor). Bütçeyi
+         korumak için bina SAYISI düşürüldü: uzun dükkân sırası tercih ediliyor
+         ve daha çok kenar boş bırakılıyor. 77 → ~48 kopya. */
+      if(rnd()<0.74){                          /* uzun dükkân sırası */
         binaKoy(2,k.cx,k.cz,k.yaw,blok);
       } else {                                 /* iki ayrı ev */
         const ofs=BLOK*0.26;
         for(const yon of [-1,1]){
           const x=k.uzun==='x'?k.cx+yon*ofs:k.cx;
           const z=k.uzun==='x'?k.cz:k.cz+yon*ofs;
-          if(rnd()<0.30) continue;             /* boşluk: avlu girişi */
+          if(rnd()<0.42) continue;             /* boşluk: avlu girişi */
           binaKoy(rnd()<0.5?0:1, x, z, k.yaw, blok);
         }
       }
@@ -1662,7 +1684,7 @@ const DEKOR=birlestir(STAT);
    yarıçapı ve sis sonu toplamından büyükse atla. */
 let BINA_BLOK=[];   /* {mx,mz,r, parca:[...]} */
 let BINA_CIZILEN=0; /* kare başına kaç blok gerçekten çizildi — ölçüm için */
-if(HARITA==='kasaba') fetch('assets/binalar.json').then(r=>r.ok?r.json():null).then(j=>{
+if(HARITA==='kasaba') fetch(varlik('assets/binalar.json'),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{
   if(!j||!j.bina) return;
   const gruplar=new Map();
   for(const y of BINA_YER){
@@ -2573,9 +2595,30 @@ const PPAL={SUIT:0x2a3160,DARK:0x1c2246,ACC:0xe03a4e,SKIN:0xf2d5b1,GOLD:0xffd166
    harmanı ara karelerde uzuvları kısaltıyor. Her karede 41 kemik hiyerarşiden
    çözülüp 34'ü uniform diziye yükleniyor. */
 const MODEL_PALET=[0xe8e2d8, PPAL.SKIN, PPAL.SUIT, PPAL.DARK, 0x141a38];
+/* MODELİN KENDİ RENGİ mi, oyunun paleti mi?
+   Palet zorlanınca hangi model konursa konsun oyuncu aynı lacivert ninjayı
+   görüyor — model değiştirmenin görünürde bir karşılığı olmuyordu.
+   Kendi rengi = k-ortalamanın shaded.png'den çıkardığı bölge rengi. Dokuda ışık
+   pişmiş olduğu için ham renk guaj gölgelemesiyle çarpılınca koyulaşıyor;
+   bu yüzden parlaklık NORMALLENİYOR: renk tonu (hue/doygunluk) modelden,
+   parlaklık düzeyi paletten geliyor. Sahnenin ışığı böylece bozulmuyor. */
+const MODEL_KENDI_RENGI=true;
+function modelRengi(kendi,paletIx){
+  const p=MODEL_PALET[Math.min(paletIx,MODEL_PALET.length-1)];
+  if(!MODEL_KENDI_RENGI) return p;
+  const lum=c=>((c>>16&255)*0.299+(c>>8&255)*0.587+(c&255)*0.114)/255;
+  const lk=lum(kendi)||0.001, lp=lum(p);
+  const k=Math.min(2.5,lp/lk);                 /* üst sınır: koyu bölge patlamasın */
+  const kanal=s=>Math.max(0,Math.min(255,Math.round((kendi>>s&255)*k)));
+  return (kanal(16)<<16)|(kanal(8)<<8)|kanal(0);
+}
 const ANIM_FPS=30;
 let MODEL=null;
-fetch('assets/karakter.json').then(r=>r.ok?r.json():null).then(j=>{
+/* no-store: WKWebView'ın veri kabı uygulama YENİDEN KURULUNCA silinmiyor, bu
+   yüzden yeni paketle gelen karakter.json'un üstüne eski önbellek kopyası
+   binebiliyor — "modeli değiştirdim ama telefonda eski karakter" tam olarak bu.
+   Dosya bir kez okunuyor, önbelleği atlamanın maliyeti yok. */
+fetch(varlik('assets/karakter.json'),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{
   if(!j||!j.iskelet) return;                 /* eski biçim: derisiz, kullanma */
   /* parlaklığa göre sırala ki palet eşlemesi dosyadaki kümeleme sırasından
      bağımsız olsun — k-ortalama her çalıştırmada farklı sırada dönebiliyor */
@@ -2587,7 +2630,7 @@ fetch('assets/karakter.json').then(r=>r.ok?r.json():null).then(j=>{
   MODEL={
     boy:j.boy, iskelet:j.iskelet, anim:j.anim,
     parca:sirali.map((b,i)=>({geo:deriMesh(b.p,b.n,b.j,b.w,b.i),
-                              renk:MODEL_PALET[Math.min(i,MODEL_PALET.length-1)]})),
+                              renk:modelRengi(parseInt(b.renk.slice(1),16),i)})),
     /* çalışma tamponları — kare başına ayırma yapılmıyor */
     ters:j.iskelet.map(k=>k.ters?new Float32Array(k.ters):null),
     qA:new Float32Array(nK*4), tA:new Float32Array(nK*3),
@@ -2601,7 +2644,10 @@ fetch('assets/karakter.json').then(r=>r.ok?r.json():null).then(j=>{
     kafaIx:j.iskelet.findIndex(k=>/HeadTop_End$/.test(k.ad)),
     kosuW:0, zBosta:0, zKosu:0
   };
+  /* üçgen sayısı da yazılıyor: "5 bölge, 41 kemik" iki farklı modelde de aynı
+     çıkıyor, yani cihazda HANGİ modelin yüklendiğini ayırt etmiyordu. */
   console.log(`MODEL: ${MODEL.parca.length} bölge, ${nK} kemik, `
+    +`${j.bolge.reduce((s,b)=>s+b.i.length/3,0)} üçgen, `
     +`animasyon [${Object.keys(j.anim).join(', ')}]`);
 }).catch(e=>console.warn('MODEL yüklenemedi',e));
 
@@ -2679,7 +2725,7 @@ function deriCiz(md,mm,palet){
   GL.uniformMatrix4fv(UDER.uM,false,mm);
   GL.uniformMatrix4fv(UDER.uKemik,false,md.kemikDizi);
   GL.uniform1f(UDER.uEmiss,0);GL.uniform1f(UDER.uAlpha,1);
-  GL.uniform1f(UDER.uKar,0.35);GL.uniform1f(UDER.uParilti,TEMA.parilti*0.4);
+  GL.uniform1f(UDER.uKar,TEMA.karakterKar||0);GL.uniform1f(UDER.uParilti,TEMA.parilti*0.4);
   GL.uniform1f(UDER.uDoku,1);
   GL.enableVertexAttribArray(2);GL.enableVertexAttribArray(3);
   md.parca.forEach((pr,i)=>{
