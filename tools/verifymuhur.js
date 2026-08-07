@@ -78,7 +78,9 @@ const T = [
   [['fire','air'],'Alev Fırtınası'],[['water','fire'],'Kaynar Dalga'],
   [['fire','water'],'Buhar Perdesi'],[['earth','bolt'],'Sarsıntı'],
   [['earth','water','fire'],'Volkan'],[['fire','air','bolt'],'Yanan Gökyüzü'],
-  [['fire','bolt'],null],[['air','water'],null],[['fire','air','water'],null],
+  /* 🔥⚡ nötr bir çift, yani kural tabanlı üçlüye girmiyor; ELLE tablosundaki
+     alan becerisi bu boşluğu dolduruyor. Kalan nötr çiftler hâlâ rezerve. */
+  [['fire','bolt'],'Gök Ateşi'],[['air','water'],null],[['fire','air','water'],null],
 ];
 for (const [dz,bekl] of T) {
   const b=M.beceriBul(dz), got=b?b.ad:null, ok=got===bekl; if(!ok)fail++;
@@ -89,7 +91,8 @@ let kaps=0,isim=new Set();
 for(const a of EL)for(const b of EL){const r=M.beceriBul([a,b]);if(r){kaps++;isim.add(r.ad);}}
 let z=0;for(const a of EL)for(const b of EL)for(const c of EL)if(M.beceriBul([a,b,c]))z++;
 console.log(`\n ikili kapsam ${kaps}/25 · ${isim.size} farklı beceri · üçlü zincir ${z}/125`);
-if(kaps!==15||isim.size!==15||z!==5){fail++;console.log(' ✗ HATA: kapsam beklenenden farklı');}
+/* 15 kural tabanlı (5 aynı + 5 yener + 5 yenilir) + ELLE tablosundaki 1 giriş. */
+if(kaps!==16||isim.size!==16||z!==5){fail++;console.log(' ✗ HATA: kapsam beklenenden farklı');}
 
 console.log('\n4) HAVADA ÇARPIŞMA\n');
 const mermi=(el,guc)=>({el,guc});
@@ -125,6 +128,10 @@ console.log(` ${sapma?'✗ HATA':'✓'}  aynı element çarpışmasında hep gü
 if(sapma)fail++;
 
 console.log('\n5) TEK MÜHÜR MODU (kombo kapalı, 60 fps kare simülasyonu)\n');
+/* KOMBO artık varsayılan olarak AÇIK. Bu bölüm tek mühür modunu sınıyor, o
+   yüzden açıkça kapatılıyor — eskiden kapatılmıyordu ve bölüm sessizce yanlış
+   modu ölçüyordu. */
+M.komboAyar(false);
 const DT=1000/60;
 function oyna(adimlar){
   const D=M.yeniDizi(); let t=0; const olaylar=[];
@@ -132,40 +139,50 @@ function oyna(adimlar){
   return {D,olaylar};
 }
 const F=(id,ms)=>[id,Math.round(ms/DT)];
+/* TUT: "onaylanacak kadar tut" niyetini tek yerde yazıyoruz. Senaryolar
+   KILIT_MS=150 iken yazılmıştı ve 300 ms'lik adımlar eşiği ANCAK sıyırıyordu;
+   ölçülen tutuş ilk-son oy farkı olduğu için gerçekte 283 ms çıkıyor, üstelik
+   biriken kayan nokta toplamı eşiği bazen alttan teğet geçiyordu. Eşiğin bir
+   kare üstünü hedeflemek testi eşiğe kırılgan bağlar; niyet "kasıtlı duruş",
+   o yüzden rahat bir pay bırakılıyor. */
+const TUT=(id)=>F(id,M.KILIT_MS+100);
 const tip=r=>r.olaylar.map(o=>o.tip).join(',')||'—';
 const SEN=[
-  ['🔥 → şarj olur (ateş etmez)', [F('fire',300),F(null,600)],
+  ['🔥 → şarj olur (ateş etmez)', [TUT('fire'),F(null,600)],
     r=>tip(r)==='yuklemeBasladi,yuklendi' && r.D.beceri && r.D.beceri.ad==='Alev Oku'],
-  ['🔥 → 👉 → ateşler', [F('fire',300),F(null,150),F('gun',300),F(null,200)],
+  ['🔥 → 👉 → ateşler', [TUT('fire'),F(null,150),TUT('gun'),F(null,200)],
     r=>r.olaylar.some(o=>o.tip==='ates'&&o.beceri.ad==='Alev Oku')],
-  ['ateşten sonra şarj sıfırlanır', [F('fire',300),F(null,150),F('gun',300),F(null,200)],
+  ['ateşten sonra şarj sıfırlanır', [TUT('fire'),F(null,150),TUT('gun'),F(null,200)],
     r=>r.D.beceri===null],
-  ['şarjsız 👉 hiçbir şey yapmaz', [F('gun',400),F(null,200)],
+  ['şarjsız 👉 hiçbir şey yapmaz', [TUT('gun'),F(null,200)],
     r=>!r.olaylar.some(o=>o.tip==='ates')],
   ['🔥 sonra tekrar 🔥 şarjı baştan başlatmaz',
-    [F('fire',300),F(null,150),F('fire',300),F(null,150)],
+    [TUT('fire'),F(null,150),TUT('fire'),F(null,150)],
     r=>r.olaylar.filter(o=>o.tip==='yuklemeBasladi').length===1],
   ['şarjlıyken farklı element şarjı değiştirir',
-    [F('fire',300),F(null,600),F('earth',300),F(null,600)],
+    [TUT('fire'),F(null,600),TUT('earth'),F(null,600)],
     r=>r.D.beceri&&r.D.beceri.el==='earth'],
   /* Silah TUTULAN tetik: şarj dolmadan silaha geçersen bekler, dolunca ateşler.
-     Kritik olan atışın şarjdan ÖNCE olmaması. */
+     Kritik olan atışın şarjdan ÖNCE olmaması. Toprak şarjı 250 ms, mühür onayı
+     400 ms — silaha geçtiğinde şarj henüz dolmamış oluyor, aranan durum bu. */
   ['erken 👉 tutulur, şarj dolunca ateşler',
-    [F('earth',180),F('gun',700)],
+    [TUT('earth'),F('gun',700)],
     r=>{const i=r.olaylar.findIndex(o=>o.tip==='yuklendi'),
              j=r.olaylar.findIndex(o=>o.tip==='ates');
         return i>=0&&j>i;}],
   ['şarj dolu ama 👉 yapılmazsa ateşlemez',
-    [F('earth',180),F(null,800)],
+    [TUT('earth'),F(null,800)],
     r=>r.olaylar.some(o=>o.tip==='yuklendi')&&!r.olaylar.some(o=>o.tip==='ates')],
   ['şarj bekler, sonradan 👉 yapılınca ateşler',
-    [F('earth',180),F(null,900),F('gun',300)],
+    [TUT('earth'),F(null,900),TUT('gun')],
     r=>r.olaylar.some(o=>o.tip==='ates')],
-  ['🔥 kısa dokunuş (100ms) tetiklemez', [F('fire',100),F(null,400)],
+  /* Eşiğin hemen ALTINDA bir duruş: geçiş sırasında elin uğradığı şekiller bu
+     kadar sürebiliyor, onaylanmamaları KILIT_MS'in varlık sebebi. */
+  ['🔥 eşik altı duruş tetiklemez', [F('fire',M.KILIT_MS-80),F(null,400)],
     r=>tip(r)==='—'],
   ['iki kez ateşlemek için iki mühür gerekir',
-    [F('fire',300),F(null,150),F('gun',300),F(null,150),F('gun',300),F(null,150),
-     F('fire',300),F(null,150),F('gun',300),F(null,150)],
+    [TUT('fire'),F(null,150),TUT('gun'),F(null,150),TUT('gun'),F(null,150),
+     TUT('fire'),F(null,150),TUT('gun'),F(null,150)],
     r=>r.olaylar.filter(o=>o.tip==='ates').length===2],
 ];
 for(const [ad,adim,kontrol] of SEN){
